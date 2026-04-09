@@ -7,18 +7,18 @@
 
 ## Phase 1: Project Scaffolding & Setup 🏗️
 *Goal: Get the foundation built and instantly deployed.*
-- [ ] Initialize Next.js project (TypeScript, Tailwind CSS, App Router).
-- [ ] Create a Supabase project and secure the `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-- [ ] Register an application on the Deriv API Hub to generate the `app_id`.
-- [ ] Setup `.env.local` for local development.
+- [x] Initialize Next.js project (TypeScript, Tailwind CSS, App Router).
+- [x] Create a Supabase project and secure the `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- [x] Register an application on the Deriv API Hub to generate the `app_id`.
+- [x] Setup `.env.local` for local development.
 - [ ] Push initial commit to GitHub and deploy to Vercel.
 
 ## Phase 2: The Database Ledger (Supabase Schema) 🗄️
 *Goal: Build the custom backend to manage virtual funds and multiplayer lobbies.*
-- [ ] Create `players` table (id, username, game_token_balance, is_bot).
-- [ ] Create `lobbies` table (id, status, started_at).
-- [ ] Create `lobby_players` join table (to track the 5 players/bots per lobby).
-- [ ] Create `trades` table (id, player_id, lobby_id, direction, stake, entry_price, exit_price, status).
+- [x] Create `players` table (id, username, game_token_balance, is_bot).
+- [x] Create `lobbies` table (id, status, started_at).
+- [x] Create `lobby_players` join table (to track the 5 players/bots per lobby).
+- [x] Create `trades` table (id, player_id, lobby_id, direction, stake, entry_price, exit_price, status).
 
 ## Phase 3: The Price Oracle (Deriv API Integration) 📈
 *Goal: Connect to Deriv's WebSockets to stream live market data.*
