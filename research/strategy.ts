@@ -133,24 +133,6 @@ export function createStrategy(): StrategyInstance {
       const minStake = buyIn * 0.01;
       if (balance < minStake * 2) return null;
 
-      // ---- QUOTA URGENCY ----
-      const ticksRemaining = GAME_TOTAL_TICKS - totalTicks;
-      const tradesNeeded = MIN_TRADES_QUOTA - tradesPlaced;
-
-      if (tradesNeeded > 0 && ticksRemaining <= tradesNeeded * 12) {
-        const direction: "UP" | "DOWN" =
-          shortEMA !== null && longEMA !== null
-            ? shortEMA >= longEMA ? "UP" : "DOWN"
-            : Math.random() < 0.5 ? "UP" : "DOWN";
-
-        const stake = computeStake(balance, buyIn);
-        if (stake < minStake) return null;
-
-        ticksSinceLastTrade = 0;
-        tradesPlaced++;
-        return { direction, stake };
-      }
-
       // ---- Cooldown check (for signal trades) ----
       if (ticksSinceLastTrade < PARAMS.cooldownTicks) return null;
 
