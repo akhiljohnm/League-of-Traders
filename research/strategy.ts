@@ -32,7 +32,7 @@ const PARAMS = {
   momentumBias: 0.65,       // Probability of following micro-momentum
 
   // Trade Management
-  stakePercent: 0.06,       // Fraction of balance per trade
+  stakePercent: 0.08,       // Fraction of balance per trade
   maxStakePercent: 0.25,    // Hard cap on stake as fraction of balance
   cooldownTicks: 5,         // Min ticks between signal trades
   minTicks: 15,             // Warmup period before first trade
@@ -110,7 +110,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch Hybrid v2",
+    name: "AutoResearch Hybrid v3",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
