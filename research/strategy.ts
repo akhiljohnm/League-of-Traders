@@ -26,7 +26,7 @@ const PARAMS = {
 
   // Bollinger Bands (Mean Reversion)
   bbWindow: 20,             // Rolling window for mean + stddev
-  bbMultiplier: 1.8,        // Stddev multiplier for band width
+  bbMultiplier: 1.85,       // Stddev multiplier for band width
 
   // Trade Management
   stakePercent: 0.19,       // Fraction of balance per trade
