@@ -27,7 +27,7 @@ const PARAMS = {
   // Bollinger Bands (Mean Reversion)
   bbWindow: 20,             // Rolling window for mean + stddev
   bbMultiplier: 1.80,       // Stddev multiplier for low-vol markets
-  bbMultiplierHigh: 1.87,   // Stddev multiplier for high-vol markets
+  bbMultiplierHigh: 1.86,   // Stddev multiplier for high-vol markets
   bbVolThreshold: 0.0004,   // RelVol above this = use high multiplier
 
   // Trade Management
