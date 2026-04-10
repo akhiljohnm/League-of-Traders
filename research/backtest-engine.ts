@@ -22,7 +22,8 @@ import type {
 
 const RISE_PAYOUT = 1.954;
 const FALL_PAYOUT = 1.952;
-const TRADE_DURATION_TICKS = 5;
+const DEFAULT_TRADE_DURATION_TICKS = 5;
+const ALLOWED_DURATIONS = new Set([1, 2, 3, 4, 5, 6, 8, 10]);
 const BUY_IN = 10_000;
 
 function getPayoutMultiplier(direction: "UP" | "DOWN"): number {
@@ -50,6 +51,7 @@ interface PendingTrade {
   stake: number;
   entryPrice: number;
   entryTick: number;
+  duration: number;
 }
 
 // ---- Core backtest function ----
@@ -76,7 +78,7 @@ export function runBacktest(
     // 1. Resolve matured trades
     const stillPending: PendingTrade[] = [];
     for (const pt of pendingTrades) {
-      if (i - pt.entryTick >= TRADE_DURATION_TICKS) {
+      if (i - pt.entryTick >= pt.duration) {
         const exitPrice = tick.quote;
         const won = didTradeWin(pt.direction, pt.entryPrice, exitPrice);
         const multiplier = getPayoutMultiplier(pt.direction);
@@ -111,12 +113,17 @@ export function runBacktest(
     if (decision) {
       const actualStake = Math.min(decision.stake, balance);
       if (actualStake > 0) {
+        const requestedDuration = decision.duration ?? DEFAULT_TRADE_DURATION_TICKS;
+        const duration = ALLOWED_DURATIONS.has(requestedDuration)
+          ? requestedDuration
+          : DEFAULT_TRADE_DURATION_TICKS;
         balance = round2(balance - actualStake);
         pendingTrades.push({
           direction: decision.direction,
           stake: actualStake,
           entryPrice: tick.quote,
           entryTick: i,
+          duration,
         });
       }
     }

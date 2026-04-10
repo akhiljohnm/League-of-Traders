@@ -31,8 +31,9 @@ const PARAMS = {
   bbVolThreshold: 0.0004,   // RelVol above this = use high multiplier
 
   // Trade Management
+  contractDuration: 5,      // Ticks per contract. Allowed: 1,2,3,4,5,6,8,10
   stakePercent: 0.25,       // Fraction of balance per trade
-  lateGameMultiplier: 2.35, // Stake boost in final 60 ticks when winning
+  lateGameMultiplier: 2.25, // Stake boost in final 60 ticks when winning
   lateGameTick: 225,        // Tick threshold for late-game boost
   cooldownTicks: 5,         // Min ticks between signal trades
   minTicks: 15,             // Warmup period before first trade
@@ -175,7 +176,7 @@ export function createStrategy(): StrategyInstance {
       if (stakeAmt < minStake) return null;
 
       ticksSinceLastTrade = 0;
-      return { direction, stake: stakeAmt };
+      return { direction, stake: stakeAmt, duration: PARAMS.contractDuration };
     },
 
     reset() {
