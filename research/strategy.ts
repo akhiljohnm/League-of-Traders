@@ -31,7 +31,7 @@ const PARAMS = {
   bbVolThreshold: 0.0004,   // RelVol above this = use high multiplier
 
   // Trade Management
-  stakePercent: 0.23,       // Fraction of balance per trade
+  stakePercent: 0.24,       // Fraction of balance per trade
   maxStakePercent: 0.25,    // Hard cap on stake as fraction of balance
   cooldownTicks: 5,         // Min ticks between signal trades
   minTicks: 15,             // Warmup period before first trade
