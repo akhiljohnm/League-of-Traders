@@ -37,8 +37,8 @@ const PARAMS = {
   minTicks: 15,             // Warmup period before first trade
 
   // Game-Aware Sizing
-  rescueMultiplier: 1.5,    // Stake multiplier when losing (balance < buyIn)
-  alphaMultiplier: 0.8,     // Stake multiplier when winning
+  rescueMultiplier: 0.8,    // Conservative when losing (protect capital)
+  alphaMultiplier: 1.5,     // Aggressive when winning (ride the streak)
 
   // Signal Weights (how to blend indicators)
   trendWeight: 0.5,         // Weight for EMA crossover signal
