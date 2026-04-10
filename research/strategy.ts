@@ -81,11 +81,6 @@ export function createStrategy(): StrategyInstance {
     return Math.sqrt(variance);
   }
 
-  // ---- Stake sizing ----
-  function computeStake(balance: number): number {
-    return Math.round(balance * PARAMS.stakePercent * 100) / 100;
-  }
-
   return {
     name: "AutoResearch Hybrid v12",
 
@@ -172,9 +167,8 @@ export function createStrategy(): StrategyInstance {
       if (Math.abs(composite) < signalThreshold) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
-      const isLateAndWinning = totalTicks >= PARAMS.lateGameTick && balance > buyIn;
       const stakeAmt = Math.round(
-        balance * (isLateAndWinning ? PARAMS.stakePercent * PARAMS.lateGameMultiplier : PARAMS.stakePercent) * 100
+        balance * (isLateGame ? PARAMS.stakePercent * PARAMS.lateGameMultiplier : PARAMS.stakePercent) * 100
       ) / 100;
       if (stakeAmt < minStake) return null;
 
