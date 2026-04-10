@@ -36,7 +36,7 @@ Whenever we complete a major feature, pivot a technical decision, or successfull
 ### 📈 Rise/Fall Game Mode (CORE TRADE MECHANIC)
 All trades in the game use the **Rise/Fall** contract type, simulated locally:
 * **Mechanic:** From a starting tick, predict whether the market price will be **higher (Rise/UP)** or **lower (Fall/DOWN)** after a set number of ticks.
-* **Tick Duration:** Configurable per trade (default: 5 ticks). After `duration` ticks, the trade resolves automatically.
+* **Tick Duration:** Configurable per trade (default: 5 ticks). Allowed values: 1, 2, 3, 4, 5, 6, 8, 10 ticks. After `duration` ticks, the trade resolves automatically.
 * **Payout:** Win = `stake × 1.954` (e.g., $10 bet → $19.54 return). Loss = forfeit the entire stake.
 * **Win Condition:** If direction is UP, win when `exit_price > entry_price`. If direction is DOWN, win when `exit_price < entry_price`. Exact same price = loss (no movement = no win).
 * **Simulation:** We do NOT use Deriv's proposal/buy/sell contract APIs. We use Deriv only as a Price Oracle for live tick data. Trade placement, resolution, and payout math are all handled by our own `src/lib/game/rise-fall.ts` module.
