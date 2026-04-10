@@ -31,14 +31,9 @@ const PARAMS = {
   bbVolThreshold: 0.0004,   // RelVol above this = use high multiplier
 
   // Trade Management
-  stakePercent: 0.25,       // Fraction of balance per trade
-  maxStakePercent: 0.25,    // Hard cap on stake as fraction of balance
+  stakePercent: 0.25,       // Fraction of balance per trade (flat — no game-aware sizing)
   cooldownTicks: 5,         // Min ticks between signal trades
   minTicks: 15,             // Warmup period before first trade
-
-  // Game-Aware Sizing
-  rescueMultiplier: 1.0,    // Neutral when losing
-  alphaMultiplier: 1.5,     // Aggressive when winning (ride the streak)
 
   // Signal Weights (how to blend indicators)
   trendWeight: 0.5,         // Weight for EMA crossover signal
@@ -83,21 +78,8 @@ export function createStrategy(): StrategyInstance {
   }
 
   // ---- Stake sizing ----
-  function computeStake(balance: number, buyIn: number): number {
-    const isRescue = balance < buyIn;
-    const isAlpha = balance > buyIn;
-
-    let multiplier = 1.0;
-    if (isRescue) {
-      multiplier = PARAMS.rescueMultiplier;
-    } else if (isAlpha) {
-      multiplier = PARAMS.alphaMultiplier;
-    }
-
-    return Math.min(
-      Math.round(balance * PARAMS.stakePercent * multiplier * 100) / 100,
-      balance * PARAMS.maxStakePercent
-    );
+  function computeStake(balance: number): number {
+    return Math.round(balance * PARAMS.stakePercent * 100) / 100;
   }
 
   return {
@@ -184,7 +166,7 @@ export function createStrategy(): StrategyInstance {
       if (Math.abs(composite) < 0.25) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
-      const stake = computeStake(balance, buyIn);
+      const stake = computeStake(balance);
       if (stake < minStake) return null;
 
       ticksSinceLastTrade = 0;
