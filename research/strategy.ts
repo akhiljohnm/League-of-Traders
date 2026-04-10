@@ -21,12 +21,12 @@ import type { Tick, TradeDecision, StrategyInstance } from "./types";
 
 const PARAMS = {
   // EMA Crossover (Trend Following)
-  shortWindow: 5,           // Short EMA period
-  longWindow: 15,           // Long EMA period
+  shortWindow: 8,           // Short EMA period
+  longWindow: 21,           // Long EMA period
 
   // Bollinger Bands (Mean Reversion)
   bbWindow: 20,             // Rolling window for mean + stddev
-  bbMultiplier: 2.0,        // Stddev multiplier for band width
+  bbMultiplier: 1.8,        // Stddev multiplier for band width
 
   // Momentum
   momentumBias: 0.65,       // Probability of following micro-momentum
@@ -34,7 +34,7 @@ const PARAMS = {
   // Trade Management
   stakePercent: 0.06,       // Fraction of balance per trade
   maxStakePercent: 0.25,    // Hard cap on stake as fraction of balance
-  cooldownTicks: 6,         // Min ticks between signal trades
+  cooldownTicks: 5,         // Min ticks between signal trades
   minTicks: 15,             // Warmup period before first trade
 
   // Game-Aware Sizing
@@ -110,7 +110,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch Hybrid v1",
+    name: "AutoResearch Hybrid v2",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -206,7 +206,7 @@ export function createStrategy(): StrategyInstance {
         momentumSignal * PARAMS.momentumWeight;
 
       // Only trade if composite signal is strong enough
-      if (Math.abs(composite) < 0.3) return null;
+      if (Math.abs(composite) < 0.25) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
       const stake = computeStake(balance, buyIn);
