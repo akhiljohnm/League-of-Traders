@@ -200,7 +200,7 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
           if (!otherHumanIds.includes(row.player_id)) return;
 
           console.log(
-            `[GameEngine] Teammate ${row.player_id} placed ${row.direction} $${row.stake} trade`
+            `[GameEngine] Realtime: Teammate ${row.player_id} placed ${row.direction} $${row.stake} trade`
           );
 
           setOtherHumanBalances((prev) => {
@@ -243,7 +243,7 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
               : 0;
 
           console.log(
-            `[GameEngine] Teammate ${row.player_id} trade ${row.status}: ${row.status === "won" ? `+$${grossPayout}` : `-$${row.stake}`}`
+            `[GameEngine] Realtime: Teammate ${row.player_id} trade ${row.status}: ${row.status === "won" ? `+$${grossPayout}` : `-$${row.stake}`}`
           );
 
           setOtherHumanBalances((prev) => {
@@ -269,6 +269,57 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
       supabase.removeChannel(channel);
     };
   }, [lobbyId, allPlayers, currentPlayer.id, buyIn]);
+
+  // ---- Polling fallback: sync other humans' trade data every 3s ----
+  // Ensures balance/trade info updates even when Realtime is broken
+  useEffect(() => {
+    const otherHumanIds = allPlayers
+      .filter((lp) => lp.player.id !== currentPlayer.id && !lp.player.is_bot)
+      .map((lp) => lp.player.id);
+
+    if (otherHumanIds.length === 0) return;
+    if (gamePhase !== "active") return;
+
+    const interval = setInterval(async () => {
+      try {
+        for (const playerId of otherHumanIds) {
+          // Fetch all trades for this player in this lobby
+          const { data: trades } = await supabase
+            .from("trades")
+            .select("stake, direction, status, payout")
+            .eq("lobby_id", lobbyId)
+            .eq("player_id", playerId);
+
+          if (!trades) continue;
+
+          const tradeCount = trades.length;
+          // Compute balance from trade history: start with buyIn, subtract stakes, add gross payouts for wins
+          let balance = buyIn;
+          for (const t of trades) {
+            balance -= t.stake;
+            if (t.status === "won") {
+              balance += Math.round(t.stake * getPayoutMultiplier(t.direction as TradeDirection) * 100) / 100;
+            }
+          }
+
+          setOtherHumanBalances((prev) => {
+            const next = new Map(prev);
+            const current = next.get(playerId);
+            // Only update if data actually changed
+            if (!current || current.balance !== balance || current.tradeCount !== tradeCount) {
+              next.set(playerId, { balance, tradeCount });
+              return next;
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.error("[GameEngine] Trade poll error:", err);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [lobbyId, allPlayers, currentPlayer.id, buyIn, gamePhase]);
 
   // ---- Transition to active once connected ----
   useEffect(() => {

@@ -145,7 +145,7 @@ export default function LobbyView({
           filter: `lobby_id=eq.${lobbyId}`,
         },
         () => {
-          console.log("[LobbyView] New player joined — reloading");
+          console.log("[LobbyView] Realtime: New player joined — reloading");
           loadPlayers();
         }
       )
@@ -158,14 +158,14 @@ export default function LobbyView({
           filter: `id=eq.${lobbyId}`,
         },
         (payload) => {
-          console.log("[LobbyView] Lobby updated:", payload.new);
+          console.log("[LobbyView] Realtime: Lobby updated:", payload.new);
           const updated = payload.new as Lobby;
           setLobby(updated);
           if (updated.status === "locked") {
             onLobbyLocked(lobbyId);
           }
           if (updated.status === "in_progress") {
-            console.log("[LobbyView] Game started — redirecting to game screen");
+            console.log("[LobbyView] Realtime: Game started — redirecting to game screen");
             onGameStart(lobbyId);
           }
         }
@@ -179,6 +179,48 @@ export default function LobbyView({
       supabase.removeChannel(channel);
     };
   }, [lobbyId, loadPlayers, onLobbyLocked, onGameStart]);
+
+  // Polling fallback: sync players and lobby status every 3s
+  // This ensures sync works even if Supabase Realtime is broken (RLS, publication issues, etc.)
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        // Poll lobby status
+        const freshLobby = await getLobby(lobbyId);
+        if (freshLobby) {
+          setLobby((prev) => {
+            if (prev?.status !== freshLobby.status) {
+              console.log(`[LobbyView] Poll: Lobby status changed to ${freshLobby.status}`);
+              if (freshLobby.status === "locked") {
+                onLobbyLocked(lobbyId);
+              }
+              if (freshLobby.status === "in_progress") {
+                console.log("[LobbyView] Poll: Game started — redirecting to game screen");
+                onGameStart(lobbyId);
+              }
+            }
+            return freshLobby;
+          });
+        }
+
+        // Poll players
+        const freshPlayers = await getLobbyPlayers(lobbyId);
+        setSlots((prev) => {
+          if (prev.length !== freshPlayers.length) {
+            console.log(`[LobbyView] Poll: Player count changed ${prev.length} → ${freshPlayers.length}`);
+          }
+          return freshPlayers.map((lp) => ({
+            lobbyPlayer: lp,
+            player: lp.player,
+          }));
+        });
+      } catch (err) {
+        console.error("[LobbyView] Poll error:", err);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [lobbyId, onLobbyLocked, onGameStart]);
 
   // Refresh player balance periodically
   useEffect(() => {
