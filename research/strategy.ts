@@ -40,7 +40,6 @@ const PARAMS = {
   // Game-Aware Sizing
   rescueMultiplier: 1.5,    // Stake multiplier when losing (balance < buyIn)
   alphaMultiplier: 0.8,     // Stake multiplier when winning
-  lateGameMultiplier: 0.80, // Stake multiplier in last 60 ticks when winning
 
   // Signal Weights (how to blend indicators)
   trendWeight: 0.5,         // Weight for EMA crossover signal
@@ -91,16 +90,14 @@ export function createStrategy(): StrategyInstance {
 
   // ---- Stake sizing ----
   function computeStake(balance: number, buyIn: number): number {
-    const ticksRemaining = GAME_TOTAL_TICKS - totalTicks;
     const isRescue = balance < buyIn;
     const isAlpha = balance > buyIn;
-    const isLateGame = ticksRemaining < 60;
 
     let multiplier = 1.0;
     if (isRescue) {
       multiplier = PARAMS.rescueMultiplier;
     } else if (isAlpha) {
-      multiplier = isLateGame ? PARAMS.lateGameMultiplier : PARAMS.alphaMultiplier;
+      multiplier = PARAMS.alphaMultiplier;
     }
 
     return Math.min(
@@ -110,7 +107,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch Hybrid v11",
+    name: "AutoResearch Hybrid v12",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
