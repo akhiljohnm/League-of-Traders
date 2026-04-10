@@ -40,11 +40,11 @@ All trades in League of Traders use the **Rise/Fall** contract type. This is a s
   * Example: $10 stake → $0 returned → -$10 net loss.
 
 ### Tick Duration Options
-The number of ticks before resolution can vary:
-* **1 tick:** Ultra-fast, highest variance
-* **3 ticks:** Short-term
-* **5 ticks:** Standard (default for bots and recommended for humans)
-* **10 ticks:** Medium-term
+The number of ticks before resolution can vary. Allowed values: **1, 2, 3, 4, 5, 6, 8, 10**.
+* **1–2 ticks:** Ultra-fast, highest variance
+* **3–4 ticks:** Short-term
+* **5–6 ticks:** Standard (default: 5 ticks, recommended for humans and bots)
+* **8–10 ticks:** Medium-term, smoother signal but slower feedback
 
 ### Implementation
 * **Shared Module:** `src/lib/game/rise-fall.ts` — used by both human trading UI and BotEngine

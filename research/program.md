@@ -121,12 +121,13 @@ Since backtests run in milliseconds (~100ms), each experiment takes ~30 seconds 
 
 ## Rise/Fall domain knowledge
 
-The game uses Rise/Fall contracts: predict whether the price will be higher (UP/Rise) or lower (DOWN/Fall) after 5 ticks. Key facts for the optimizer:
+The game uses Rise/Fall contracts: predict whether the price will be higher (UP/Rise) or lower (DOWN/Fall) after N ticks. Key facts for the optimizer:
 
 - **Payout**: Win = stake × 1.954 (UP) or 1.952 (DOWN). Loss = forfeit stake.
 - **Break-even win rate**: ~51.3%. Even small improvements above this have massive compound impact.
 - **Game duration**: 300 ticks (~5 minutes). Must place at least 5 trades (quota).
 - **Buy-in**: $10,000 virtual balance.
+- **Contract duration**: The number of ticks before a contract closes is a tunable hyperparameter. Allowed values: 1, 2, 3, 4, 5, 6, 8, 10. Shorter durations (1–3 ticks) react faster but are noisier; longer durations (6–10 ticks) smooth out noise but slow the feedback loop. Can be optimized per-strategy or varied dynamically.
 - **Optimal trade frequency**: Too few trades = insufficient samples, too many = balance churn. Sweet spot is 10-30 trades per game.
 - **Markets vary**: Volatility 100 has the most movement (easier signals), Volatility 10 the least (harder to predict). A robust strategy should handle all.
 
