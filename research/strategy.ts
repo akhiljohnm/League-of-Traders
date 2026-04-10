@@ -28,7 +28,7 @@ const PARAMS = {
   bbWindow: 20,             // Rolling window for mean + stddev
   bbMultiplier: 1.80,       // Stddev multiplier for low-vol markets
   bbMultiplierHigh: 1.87,   // Stddev multiplier for high-vol markets
-  bbVolThreshold: 0.001,    // RelVol above this = use high multiplier
+  bbVolThreshold: 0.0005,   // RelVol above this = use high multiplier
 
   // Trade Management
   stakePercent: 0.19,       // Fraction of balance per trade
