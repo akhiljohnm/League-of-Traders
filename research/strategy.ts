@@ -40,7 +40,7 @@ const PARAMS = {
   // Game-Aware Sizing
   rescueMultiplier: 1.5,    // Stake multiplier when losing (balance < buyIn)
   alphaMultiplier: 0.8,     // Stake multiplier when winning
-  lateGameMultiplier: 0.75, // Stake multiplier in last 60 ticks when winning
+  lateGameMultiplier: 0.80, // Stake multiplier in last 60 ticks when winning
 
   // Signal Weights (how to blend indicators)
   trendWeight: 0.5,         // Weight for EMA crossover signal
