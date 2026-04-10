@@ -32,7 +32,7 @@ const PARAMS = {
 
   // Trade Management
   stakePercent: 0.25,       // Fraction of balance per trade
-  lateGameMultiplier: 1.50, // Stake boost in final 60 ticks when winning
+  lateGameMultiplier: 1.60, // Stake boost in final 60 ticks when winning
   lateGameTick: 240,        // Tick threshold for late-game boost
   cooldownTicks: 5,         // Min ticks between signal trades
   minTicks: 15,             // Warmup period before first trade
