@@ -45,6 +45,7 @@ const PARAMS = {
 
   // Regime Detection
   flatMarketThreshold: 0.0002, // Below this relative stddev, skip trading
+  lateGameThreshold: 0.70,  // Higher quality filter for all-in late game trades
 };
 
 // ============================================================
@@ -166,7 +167,9 @@ export function createStrategy(): StrategyInstance {
         momentumSignal * PARAMS.momentumWeight;
 
       // Only trade if composite signal is strong enough
-      if (Math.abs(composite) < 0.25) return null;
+      const isLateGame = totalTicks >= PARAMS.lateGameTick && balance > buyIn;
+      const signalThreshold = isLateGame ? PARAMS.lateGameThreshold : 0.25;
+      if (Math.abs(composite) < signalThreshold) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
       const isLateAndWinning = totalTicks >= PARAMS.lateGameTick && balance > buyIn;
