@@ -37,3 +37,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# auto-research
+research/data/
+research/run.log
+research/results.tsv
+research/.ipynb_checkpoints/

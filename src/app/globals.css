@@ -225,3 +225,45 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
 }
+
+/* ============ Post-Game Animations ============ */
+
+/* MVP crown bounce */
+@keyframes crown-bounce {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-6px) rotate(-5deg); }
+  75% { transform: translateY(-3px) rotate(5deg); }
+}
+.animate-crown-bounce {
+  animation: crown-bounce 2s ease-in-out infinite;
+}
+
+/* Scale-in for narrative cards */
+@keyframes scale-in {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.animate-scale-in {
+  animation: scale-in 0.4s ease-out both;
+}
+
+/* Gold glow for MVP card */
+.glow-gold {
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.3), 0 0 60px rgba(255, 215, 0, 0.1);
+}
+
+/* Payout flow bar animation */
+@keyframes flow-bar {
+  from { width: 0%; }
+}
+.animate-flow-bar {
+  animation: flow-bar 1s ease-out both;
+}
+
+/* Stagger delays for post-game cards */
+.stagger-5 { animation-delay: 0.5s; }
+.stagger-6 { animation-delay: 0.6s; }
+.stagger-7 { animation-delay: 0.7s; }
+.stagger-8 { animation-delay: 0.8s; }
+.stagger-9 { animation-delay: 0.9s; }
+.stagger-10 { animation-delay: 1.0s; }

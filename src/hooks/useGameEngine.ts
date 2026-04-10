@@ -11,6 +11,7 @@ import {
   endGame,
   updatePlayerFinalBalance,
 } from "@/lib/actions/lobby";
+import { creditPlayerBalance } from "@/lib/actions/player";
 import {
   calculatePayouts,
   type PayoutSummary,
@@ -271,6 +272,21 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
       console.error("[GameEngine] Failed to end game in DB:", err);
     }
 
+    // 6. Credit final payout back to human player's global balance
+    const humanPayout = payout.players.find(
+      (p) => p.playerId === currentPlayer.id
+    );
+    if (humanPayout) {
+      try {
+        await creditPlayerBalance(currentPlayer.id, humanPayout.finalBalance);
+        console.log(
+          `[GameEngine] Credited $${humanPayout.finalBalance.toFixed(2)} back to ${currentPlayer.username}`
+        );
+      } catch (err) {
+        console.error("[GameEngine] Failed to credit player balance:", err);
+      }
+    }
+
     setGamePhase("finished");
     console.log("[GameEngine] Game FINISHED");
   }, [currentTick, lobbyId, allPlayers, currentPlayer.id, buyIn, humanBalance, humanTradeCount]);
@@ -403,7 +419,7 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
   );
 
   const canTrade =
-    gamePhase === "active" && !!currentTick && humanBalance > 0;
+    gamePhase === "active" && !!currentTick && isConnected && humanBalance > 0;
 
   // ---- Compute player balances ----
   const playerBalances: PlayerBalance[] = allPlayers.map((lp) => {

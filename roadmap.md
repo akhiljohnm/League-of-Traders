@@ -42,13 +42,26 @@
 - [x] Write the auto-resolution logic (e.g., evaluating if a trade won/lost after 10 ticks).
 
 ## Phase 6: Autonomous AI Bots (The Karpathy Protocol) 🤖
-*Goal: Implement 3 distinct bot trading strategies refined by AI auto-research.*
-- [x] Define Bot 1: **"The Trend Follower"** (EMA crossover strategy; conservative 5-8% stakes, cooldown between trades).
-- [x] Define Bot 2: **"The Mean Reverter"** (Bollinger Band reversion; medium 8-12% stakes, contrarian plays on spikes).
-- [x] Define Bot 3: **"The High-Frequency Gambler"** (Rapid-fire every 4 ticks; micro-momentum with 65% bias, 3-5% stakes).
-- [x] Use Andrej Karpathy’s `auto-research` framework to simulate historical Deriv tick data and fine-tune the hyper-parameters for these 3 strategies.
-- [x] Write the BotEngine class that processes live ticks, feeds them to bot strategies, executes trades to the `trades` table, and auto-resolves after 5 ticks with 1.85x payout multiplier.
+*Goal: One AutoResearch-optimized brain, three runtime personalities.*
+
+**Architecture: "One Brain, Three Personalities"**
+The AutoResearch loop (`research/strategy.ts`) optimizes a single core signal engine. The three bot personalities are thin wrappers that differ only in *how* they act on the brain’s signal — not *what* signal they compute.
+
+- [x] Build the **AutoResearch Brain** (`src/lib/bots/brain.ts`) — shared signal engine ported from `research/strategy.ts`. Computes a composite signal (-1 to +1) by blending EMA crossover, Bollinger Bands, and micro-momentum.
+- [x] Define Bot 1: **"The Trend Follower"** — LOW RISK personality. Only trades on strong signals (|composite| >= 0.4), conservative 6% stakes, 8-tick cooldown. Patient and selective.
+- [x] Define Bot 2: **"The Mean Reverter"** — MEDIUM RISK personality. Only trades when Bollinger Band reversion signal fires (overbought/oversold), contrarian direction, 10% stakes, 6-tick cooldown.
+- [x] Define Bot 3: **"The High-Frequency Gambler"** — HIGH RISK personality. Trades on any signal (|composite| >= 0.05), micro-stakes at 4%, every 4 ticks. Maximum volume, maximum variance.
+- [x] Use Andrej Karpathy’s `auto-research` framework to optimize the shared brain’s hyperparameters across 5 volatility markets. All three personalities improve when the brain improves.
+- [x] Write the BotEngine class that processes live ticks, feeds them to bot strategies, executes trades to the `trades` table, and auto-resolves after 5 ticks with 1.954x payout multiplier.
 - [x] Make bot strategies game-aware: quota urgency (force trades to avoid inactive forfeit), role-aware staking (rescue=aggressive, alpha=conservative), late-game caution.
+
+**Research Environment** (`research/`):
+- [x] Multi-market tick data collection (all 5 Deriv volatility indices simultaneously).
+- [x] Deterministic backtest engine with Karpathy’s `---` output format.
+- [x] Live WebSocket validation (`--live` flag) for overfitting detection.
+- [x] `program.md` agent instructions matching Karpathy’s exact autoresearch conventions.
+- [x] `analysis.ipynb` for visualizing experiment results (score trajectory, best progression).
+- [x] Baseline avg_score: **9.69** across 7 datasets (101 trades).
 
 ## Phase 7: The 80/20 Payout Math (The Core Engine) 🧠
 *Goal: Execute the profit contribution game theory when the timer ends.*
@@ -61,7 +74,7 @@
 
 ## Phase 8: Post-Game Leaderboard & Polish ✨
 *Goal: Provide a satisfying UX conclusion and finalize deliverables.*
-- [ ] Build the Post-Game Leaderboard UI to visualize the 80/20 payout breakdown.
-- [ ] Highlight if an AI Bot carried the team or needed rescuing.
-- [ ] Complete the "Vibe-Coding Docs" detailing prompt history, the Karpathy auto-research logs, and AI troubleshooting.
-- [ ] Final verification of the live Vercel deployment for the judges.
+- [x] Build the Post-Game Leaderboard UI to visualize the 80/20 payout breakdown.
+- [x] Highlight if an AI Bot carried the team or needed rescuing.
+- [x] Complete the "Vibe-Coding Docs" detailing prompt history, the Karpathy auto-research logs, and AI troubleshooting.
+- [x] Final verification of the live Vercel deployment for the judges.

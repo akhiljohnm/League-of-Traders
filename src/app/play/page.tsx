@@ -6,12 +6,14 @@ import { findOrCreateLobby, joinLobby, getLobbyPlayers, getLobby } from "@/lib/a
 import type { Player, Lobby, LobbyPlayer } from "@/lib/types/database";
 import type { DerivActiveSymbol } from "@/lib/types/deriv";
 import { useActiveSymbols, getMarketLabel, getSubmarketLabel } from "@/hooks/useActiveSymbols";
+import type { PayoutSummary } from "@/lib/game/payout-engine";
 import Navbar from "@/components/Navbar";
 import UsernameForm from "@/components/UsernameForm";
 import LobbyView from "@/components/LobbyView";
 import GameView from "@/components/GameView";
+import PostGameView from "@/components/PostGameView";
 
-type PlayPhase = "login" | "market-select" | "matchmaking" | "lobby" | "game";
+type PlayPhase = "login" | "market-select" | "matchmaking" | "lobby" | "game" | "post-game";
 
 const BUY_IN_OPTIONS = [100, 500, 1_000, 5_000, 10_000];
 
@@ -22,6 +24,7 @@ export default function PlayPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allPlayers, setAllPlayers] = useState<(LobbyPlayer & { player: Player })[]>([]);
+  const [payoutSummary, setPayoutSummary] = useState<PayoutSummary | null>(null);
 
   // Restore session from localStorage
   useEffect(() => {
@@ -95,9 +98,9 @@ export default function PlayPage() {
 
   return (
     <main className="min-h-screen bg-bg-primary">
-      {phase !== "game" && <Navbar />}
+      {phase !== "game" && phase !== "post-game" && <Navbar />}
 
-      <div className={`${phase === "game" ? "pt-6" : "pt-24"} pb-16 px-6`}>
+      <div className={`${phase === "game" || phase === "post-game" ? "pt-6" : "pt-24"} pb-16 px-6`}>
         {phase === "login" && (
           <div className="animate-fade-up">
             <UsernameForm
@@ -159,10 +162,36 @@ export default function PlayPage() {
               currentPlayer={player}
               allPlayers={allPlayers}
               buyIn={lobby.buy_in}
-              onGameEnd={() => {
-                setPhase("market-select");
+              onGameEnd={(summary) => {
+                setPayoutSummary(summary);
+                setPhase("post-game");
+              }}
+            />
+          </div>
+        )}
+
+        {phase === "post-game" && payoutSummary && lobby && player && (
+          <div className="animate-fade-up">
+            <PostGameView
+              payoutSummary={payoutSummary}
+              buyIn={lobby.buy_in}
+              currentPlayerId={player.id}
+              symbol={lobby.symbol}
+              onPlayAgain={async () => {
+                const refreshed = await getPlayerById(player.id);
+                if (refreshed) setPlayer(refreshed);
                 setLobby(null);
                 setAllPlayers([]);
+                setPayoutSummary(null);
+                setPhase("market-select");
+              }}
+              onBackToMenu={async () => {
+                const refreshed = await getPlayerById(player.id);
+                if (refreshed) setPlayer(refreshed);
+                setLobby(null);
+                setAllPlayers([]);
+                setPayoutSummary(null);
+                setPhase("market-select");
               }}
             />
           </div>

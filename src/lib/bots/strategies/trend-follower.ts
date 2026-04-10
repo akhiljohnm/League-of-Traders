@@ -1,43 +1,27 @@
 import type { DerivTick } from "@/lib/types/deriv";
-import type {
-  BotStrategyInstance,
-  TradeDecision,
-  TrendFollowerParams,
-} from "../types";
-import {
-  DEFAULT_TREND_FOLLOWER_PARAMS,
-  GAME_TOTAL_TICKS,
-  MIN_TRADES_QUOTA,
-} from "../types";
+import type { BotStrategyInstance, TradeDecision, TrendFollowerParams } from "../types";
+import { DEFAULT_TREND_FOLLOWER_PARAMS, GAME_TOTAL_TICKS, MIN_TRADES_QUOTA } from "../types";
+import { createBrain } from "../brain";
 
 // ============================================================
-// The Trend Follower — LOW RISK, GAME-AWARE
-// Uses EMA crossover to ride momentum. Conservative and patient.
-// Now aware of: trade quota, alpha/rescue role, game clock.
+// The Trend Follower — LOW RISK personality
+// Uses the shared AutoResearch brain for signals.
+// Personality: patient, only trades on strong signals,
+// conservative stakes, long cooldowns.
 // ============================================================
-
-function updateEMA(
-  currentEMA: number | null,
-  price: number,
-  period: number
-): number {
-  if (currentEMA === null) return price;
-  const k = 2 / (period + 1);
-  return price * k + currentEMA * (1 - k);
-}
 
 export function createTrendFollower(
   params: Partial<TrendFollowerParams> = {}
 ): BotStrategyInstance {
   const config = { ...DEFAULT_TREND_FOLLOWER_PARAMS, ...params };
 
-  let shortEMA: number | null = null;
-  let longEMA: number | null = null;
-  let prevShortEMA: number | null = null;
-  let prevLongEMA: number | null = null;
-  let ticksSinceLastTrade = config.cooldownTicks; // Start ready to trade
+  const brain = createBrain();
+  let ticksSinceLastTrade = config.cooldownTicks;
   let totalTicks = 0;
   let tradesPlaced = 0;
+
+  /** Only trade when composite signal is strong (high confidence) */
+  const CONFIDENCE_THRESHOLD = 0.4;
 
   function computeStake(balance: number, buyIn: number): number {
     const ticksRemaining = GAME_TOTAL_TICKS - totalTicks;
@@ -62,20 +46,13 @@ export function createTrendFollower(
     name: "Trend Follower",
 
     onTick(tick: DerivTick, balance: number, buyIn: number): TradeDecision | null {
-      const price = tick.quote;
       totalTicks++;
       ticksSinceLastTrade++;
 
-      // Store previous EMAs for crossover detection
-      prevShortEMA = shortEMA;
-      prevLongEMA = longEMA;
+      const signal = brain.process(tick);
 
-      // Update EMAs
-      shortEMA = updateEMA(shortEMA, price, config.shortWindow);
-      longEMA = updateEMA(longEMA, price, config.longWindow);
-
-      // Need enough ticks to establish both EMAs
-      if (totalTicks < config.minTicks) return null;
+      // Warmup
+      if (totalTicks < config.minTicks || signal.warming) return null;
 
       // Don't trade if balance is too low
       const minStake = buyIn * 0.01;
@@ -86,66 +63,38 @@ export function createTrendFollower(
       const tradesNeeded = MIN_TRADES_QUOTA - tradesPlaced;
 
       if (tradesNeeded > 0 && ticksRemaining <= tradesNeeded * 12) {
-        const direction: "UP" | "DOWN" =
-          shortEMA !== null && longEMA !== null
-            ? shortEMA >= longEMA ? "UP" : "DOWN"
-            : Math.random() < 0.5 ? "UP" : "DOWN";
-
+        const direction: "UP" | "DOWN" = signal.composite >= 0 ? "UP" : "DOWN";
         const stake = computeStake(balance, buyIn);
         if (stake < minStake) return null;
 
         ticksSinceLastTrade = 0;
         tradesPlaced++;
         console.log(
-          `[TF] QUOTA URGENCY: forced trade #${tradesPlaced} → ${direction} $${stake.toFixed(2)} (${tradesNeeded - 1} more needed, ${ticksRemaining} ticks left)`
+          `[TF] QUOTA URGENCY: forced trade #${tradesPlaced} -> ${direction} $${stake.toFixed(2)} (${tradesNeeded - 1} more needed, ${ticksRemaining} ticks left)`
         );
         return { direction, stake };
       }
 
-      // Respect cooldown (only for signal trades, not forced)
+      // Respect cooldown
       if (ticksSinceLastTrade < config.cooldownTicks) return null;
 
-      // Need previous values for crossover detection
-      if (prevShortEMA === null || prevLongEMA === null) return null;
+      // PERSONALITY: Only trade on STRONG signals (trend-following patience)
+      if (Math.abs(signal.composite) < CONFIDENCE_THRESHOLD) return null;
 
-      // Detect crossover
-      const prevDiff = prevShortEMA - prevLongEMA;
-      const currDiff = shortEMA! - longEMA!;
+      const direction: "UP" | "DOWN" = signal.composite > 0 ? "UP" : "DOWN";
+      const stake = computeStake(balance, buyIn);
+      if (stake < minStake) return null;
 
-      // Bullish crossover: short EMA crosses above long EMA
-      if (prevDiff <= 0 && currDiff > 0) {
-        const stake = computeStake(balance, buyIn);
-        if (stake < minStake) return null;
-
-        ticksSinceLastTrade = 0;
-        tradesPlaced++;
-        console.log(
-          `[TF] BULLISH crossover: shortEMA=${shortEMA!.toFixed(2)} > longEMA=${longEMA!.toFixed(2)} → UP $${stake.toFixed(2)} (trade #${tradesPlaced})`
-        );
-        return { direction: "UP", stake };
-      }
-
-      // Bearish crossover: short EMA crosses below long EMA
-      if (prevDiff >= 0 && currDiff < 0) {
-        const stake = computeStake(balance, buyIn);
-        if (stake < minStake) return null;
-
-        ticksSinceLastTrade = 0;
-        tradesPlaced++;
-        console.log(
-          `[TF] BEARISH crossover: shortEMA=${shortEMA!.toFixed(2)} < longEMA=${longEMA!.toFixed(2)} → DOWN $${stake.toFixed(2)} (trade #${tradesPlaced})`
-        );
-        return { direction: "DOWN", stake };
-      }
-
-      return null;
+      ticksSinceLastTrade = 0;
+      tradesPlaced++;
+      console.log(
+        `[TF] Signal: ${signal.composite.toFixed(3)} (trend=${signal.trend}, bb=${signal.reversion}, mom=${signal.momentum}) -> ${direction} $${stake.toFixed(2)} (trade #${tradesPlaced})`
+      );
+      return { direction, stake };
     },
 
     reset() {
-      shortEMA = null;
-      longEMA = null;
-      prevShortEMA = null;
-      prevLongEMA = null;
+      brain.reset();
       ticksSinceLastTrade = config.cooldownTicks;
       totalTicks = 0;
       tradesPlaced = 0;

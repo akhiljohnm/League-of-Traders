@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "research:collect": "npx tsx research/collect-ticks.ts",
+    "research:collect-all": "npx tsx research/collect-all-markets.ts",
+    "research:backtest": "npx tsx research/run-backtest.ts",
+    "research:run": "npx tsx research/run-backtest.ts --all > research/run.log 2>&1 && grep '^--- avg_score:' research/run.log",
+    "research:live": "npx tsx research/run-backtest.ts --all --live > research/run.log 2>&1 && grep '^--- ' research/run.log"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",
@@ -22,5 +27,10 @@
     "react-dom": "^19.0.4",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.2"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "ws": "^8.20.0"
   }
 }

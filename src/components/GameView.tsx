@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   useGameEngine,
   type PlayerBalance,
@@ -8,7 +8,7 @@ import {
   type ResolvedTrade,
   type GamePhase,
 } from "@/hooks/useGameEngine";
-import type { PayoutSummary, PayoutResult } from "@/lib/game/payout-engine";
+import type { PayoutSummary } from "@/lib/game/payout-engine";
 import { TICK_DURATION_OPTIONS, RISE_PAYOUT, FALL_PAYOUT } from "@/lib/game/rise-fall";
 import type { Player, LobbyPlayer, TradeDirection } from "@/lib/types/database";
 import type { DerivTick } from "@/lib/types/deriv";
@@ -23,7 +23,7 @@ interface GameViewProps {
   currentPlayer: Player;
   allPlayers: (LobbyPlayer & { player: Player })[];
   buyIn: number;
-  onGameEnd: () => void;
+  onGameEnd: (summary: PayoutSummary) => void;
 }
 
 export default function GameView({
@@ -44,6 +44,19 @@ export default function GameView({
 
   const [selectedTicks, setSelectedTicks] = useState(5);
   const [stakeInput, setStakeInput] = useState("");
+
+  // Transition to post-game once payout is calculated
+  const postGameCalledRef = useRef(false);
+  useEffect(() => {
+    if (
+      engine.gamePhase === "finished" &&
+      engine.payoutSummary &&
+      !postGameCalledRef.current
+    ) {
+      postGameCalledRef.current = true;
+      onGameEnd(engine.payoutSummary);
+    }
+  }, [engine.gamePhase, engine.payoutSummary, onGameEnd]);
 
   const stake = parseFloat(stakeInput) || 0;
   const potentialWinRise = Math.round(stake * RISE_PAYOUT * 100) / 100;
@@ -70,6 +83,16 @@ export default function GameView({
         gamePhase={engine.gamePhase}
         tickCount={engine.tickCount}
       />
+
+      {/* Disconnect Warning */}
+      {!engine.isConnected && engine.gamePhase === "active" && (
+        <div className="bg-rekt-crimson/10 border border-rekt-crimson/30 rounded-xl px-4 py-3 mt-4 flex items-center gap-3">
+          <div className="w-3 h-3 rounded-full bg-rekt-crimson animate-live-pulse shrink-0" />
+          <span className="text-rekt-crimson text-sm font-medium">
+            Connection lost — reconnecting to Deriv Oracle...
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
         {/* Left: Price + Trading Controls */}
@@ -210,14 +233,17 @@ export default function GameView({
         </div>
       </div>
 
-      {/* Game Over Overlay */}
-      {engine.gamePhase === "finished" && (
-        <PayoutBreakdownOverlay
-          payoutSummary={engine.payoutSummary}
-          buyIn={buyIn}
-          currentPlayerId={currentPlayer.id}
-          onContinue={onGameEnd}
-        />
+      {/* Game ending state */}
+      {engine.gamePhase === "ending" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/80 backdrop-blur-sm">
+          <div className="text-center">
+            <div className="w-12 h-12 border-2 border-safety-cyan/20 rounded-full mx-auto mb-4 relative">
+              <div className="absolute inset-0 w-12 h-12 border-2 border-safety-cyan border-t-transparent rounded-full animate-spin" />
+            </div>
+            <div className="text-text-primary text-lg font-bold mb-1">Resolving Trades...</div>
+            <div className="text-text-muted text-sm">Calculating 80/20 payouts</div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -610,198 +636,3 @@ function TradeHistoryPanel({ trades }: { trades: ResolvedTrade[] }) {
   );
 }
 
-function PayoutBreakdownOverlay({
-  payoutSummary,
-  buyIn,
-  currentPlayerId,
-  onContinue,
-}: {
-  payoutSummary: PayoutSummary | null;
-  buyIn: number;
-  currentPlayerId: string;
-  onContinue: () => void;
-}) {
-  if (!payoutSummary) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/90 backdrop-blur-sm">
-        <div className="text-text-muted animate-pulse text-lg">Calculating payouts...</div>
-      </div>
-    );
-  }
-
-  const { players, safetyNetTotal, bailoutDistributed, spilloverDistributed, inactiveForfeited } =
-    payoutSummary;
-
-  // Sort by final balance descending
-  const sorted = [...players].sort((a, b) => b.finalBalance - a.finalBalance);
-
-  const roleColor = (role: PayoutResult["role"]) => {
-    switch (role) {
-      case "alpha": return "text-alpha-green";
-      case "rescue": return "text-rekt-crimson";
-      case "inactive": return "text-text-muted";
-      case "even": return "text-safety-cyan";
-    }
-  };
-
-  const roleBg = (role: PayoutResult["role"]) => {
-    switch (role) {
-      case "alpha": return "bg-alpha-green/10 border-alpha-green/20";
-      case "rescue": return "bg-rekt-crimson/10 border-rekt-crimson/20";
-      case "inactive": return "bg-bg-elevated border-border-default opacity-50";
-      case "even": return "bg-safety-cyan/5 border-safety-cyan/20";
-    }
-  };
-
-  const roleLabel = (role: PayoutResult["role"]) => {
-    switch (role) {
-      case "alpha": return "ALPHA";
-      case "rescue": return "RESCUE";
-      case "inactive": return "INACTIVE";
-      case "even": return "EVEN";
-    }
-  };
-
-  const fmt = (n: number) =>
-    n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/90 backdrop-blur-sm overflow-y-auto py-8">
-      <div className="bg-bg-surface border border-border-default rounded-2xl p-6 sm:p-8 max-w-2xl w-full mx-4 animate-fade-up">
-        <h2 className="text-3xl font-bold text-center text-text-primary mb-1">
-          GAME OVER
-        </h2>
-        <p className="text-text-muted text-center text-sm mb-6">
-          80/20 Payout Redistribution
-        </p>
-
-        {/* Safety Net Summary */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-bg-primary border border-border-default rounded-lg p-3 text-center">
-            <span className="text-text-muted text-[10px] uppercase tracking-wider block mb-1">
-              Safety Net
-            </span>
-            <span className="font-mono-numbers text-safety-cyan font-bold text-sm">
-              ${fmt(safetyNetTotal)}
-            </span>
-          </div>
-          <div className="bg-bg-primary border border-border-default rounded-lg p-3 text-center">
-            <span className="text-text-muted text-[10px] uppercase tracking-wider block mb-1">
-              Bailout Paid
-            </span>
-            <span className="font-mono-numbers text-rekt-crimson font-bold text-sm">
-              ${fmt(bailoutDistributed)}
-            </span>
-          </div>
-          <div className="bg-bg-primary border border-border-default rounded-lg p-3 text-center">
-            <span className="text-text-muted text-[10px] uppercase tracking-wider block mb-1">
-              Spillover
-            </span>
-            <span className="font-mono-numbers text-alpha-green font-bold text-sm">
-              ${fmt(spilloverDistributed)}
-            </span>
-          </div>
-        </div>
-
-        {/* Player Breakdown */}
-        <div className="space-y-2 mb-6">
-          {sorted.map((p, i) => {
-            const isMe = p.playerId === currentPlayerId;
-            const finalPnl = Math.round((p.finalBalance - buyIn) * 100) / 100;
-            const pnlColor = finalPnl >= 0 ? "text-alpha-green" : "text-rekt-crimson";
-            const pnlSign = finalPnl >= 0 ? "+" : "";
-
-            return (
-              <div
-                key={p.playerId}
-                className={`rounded-xl p-4 border ${
-                  isMe ? "ring-1 ring-safety-cyan/40 " : ""
-                }${roleBg(p.role)}`}
-              >
-                {/* Top row: rank, name, role badge, final balance */}
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`font-mono-numbers text-lg font-bold w-7 text-center shrink-0 ${
-                      i === 0 ? "text-safety-cyan" : "text-text-muted"
-                    }`}
-                  >
-                    #{i + 1}
-                  </span>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-text-primary font-semibold text-sm truncate">
-                        {p.username}
-                      </span>
-                      {isMe && (
-                        <span className="text-[10px] text-safety-cyan bg-safety-cyan/10 px-1.5 py-0.5 rounded">
-                          YOU
-                        </span>
-                      )}
-                      {p.isBot && (
-                        <span className="text-[10px] text-text-muted bg-bg-elevated px-1.5 py-0.5 rounded">
-                          BOT
-                        </span>
-                      )}
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${roleColor(p.role)} bg-bg-primary/50`}>
-                        {roleLabel(p.role)}
-                      </span>
-                    </div>
-                    <span className="text-text-muted text-[10px] font-mono-numbers">
-                      {p.tradeCount} trades
-                    </span>
-                  </div>
-
-                  <div className="text-right shrink-0">
-                    <span className="font-mono-numbers text-sm font-bold text-text-primary block">
-                      ${fmt(p.finalBalance)}
-                    </span>
-                    <span className={`font-mono-numbers text-[10px] ${pnlColor}`}>
-                      {pnlSign}${fmt(Math.abs(finalPnl))}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Flow details for non-even, non-inactive players */}
-                {p.role !== "even" && p.role !== "inactive" && (
-                  <div className="mt-2 pt-2 border-t border-border-default/50 flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-mono-numbers text-text-muted">
-                    <span>Raw: ${fmt(p.rawBalance)}</span>
-                    {p.alphaTax > 0 && (
-                      <span className="text-rekt-crimson">Tax: -${fmt(p.alphaTax)}</span>
-                    )}
-                    {p.bailoutReceived > 0 && (
-                      <span className="text-safety-cyan">Bailout: +${fmt(p.bailoutReceived)}</span>
-                    )}
-                    {p.spilloverReceived > 0 && (
-                      <span className="text-alpha-green">Spillover: +${fmt(p.spilloverReceived)}</span>
-                    )}
-                    {p.botProfitRouted !== 0 && (
-                      <span className={p.botProfitRouted > 0 ? "text-alpha-green" : "text-rekt-crimson"}>
-                        Bot {p.botProfitRouted > 0 ? "Received" : "Routed"}: {p.botProfitRouted > 0 ? "+" : ""}${fmt(p.botProfitRouted)}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                {/* Inactive explanation */}
-                {p.role === "inactive" && (
-                  <div className="mt-2 pt-2 border-t border-border-default/50 text-[10px] text-text-muted">
-                    Forfeited — fewer than 5 trades (${fmt(p.rawBalance)} sent to Safety Net)
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <button
-          onClick={onContinue}
-          className="w-full py-4 bg-safety-cyan text-bg-primary font-bold text-lg rounded-xl
-                     btn-glow cursor-pointer active:scale-[0.97] transition-all"
-        >
-          CONTINUE
-        </button>
-      </div>
-    </div>
-  );
-}

@@ -89,6 +89,76 @@ const ENTRIES: VibeEntryData[] = [
       "Built useDerivTicker with 25s ping interval, subscription ID tracking, forget_all cleanup on unmount, and exponential backoff (1s to 30s cap). LiveTicker component shows live quote with green/red glow.",
     tech: "src/hooks/useDerivTicker.ts returns { currentTick, previousTick, isConnected, connectionState, error, tickCount }. LiveTicker embedded in homepage hero.",
   },
+  {
+    phase: "Phase 4",
+    phaseColor: "bg-safety-cyan/10 text-safety-cyan",
+    title: "Real-Time Lobby with Mercenary Bot Hiring",
+    problem:
+      "Needed a lobby system where players wait for others, see live updates via WebSocket, and can hire AI bots to fill empty slots — all without a dedicated server.",
+    solution:
+      "Built LobbyView with Supabase Realtime subscriptions on lobby_players table. Bot hiring creates a new player record with is_bot=true, deducts buy-in from the hiring human, and auto-locks the lobby at 5/5.",
+    tech: "Supabase Realtime postgres_changes, optimistic UI updates, auto-lock via checkAndLockLobby(), 3 bot strategies (trend_follower, mean_reverter, high_freq_gambler).",
+  },
+  {
+    phase: "Phase 4",
+    phaseColor: "bg-rekt-crimson/10 text-rekt-crimson",
+    title: "Dynamic Market Selection from Deriv API",
+    problem:
+      "Players needed to choose which market to trade. Hardcoding Volatility 100 limited the experience. The Deriv V2 API provides active_symbols with hundreds of instruments.",
+    solution:
+      "Built useActiveSymbols hook that fetches all tradeable instruments, groups them by market/submarket, and presents them in a collapsible selector. Players choose their battleground before matchmaking.",
+    tech: "Custom useActiveSymbols hook, DerivActiveSymbol types, grouped accordion UI, symbol-scoped lobby matching via findOrCreateLobby(buyIn, symbol).",
+  },
+  {
+    phase: "Phase 5",
+    phaseColor: "bg-alpha-green/10 text-alpha-green",
+    title: "useGameEngine — 5-Minute Trading Cockpit",
+    problem:
+      "Need to orchestrate a 5-minute timed game loop: live Deriv price ticks, human Rise/Fall trading, concurrent bot decision-making, trade resolution, and real-time leaderboard — all in a single React hook.",
+    solution:
+      "Built useGameEngine as the central orchestrator. It manages game phases (starting, active, ending, finished), feeds ticks to BotEngine, handles optimistic stake deductions, and resolves trades based on tick maturity.",
+    tech: "Custom hook composing useDerivTicker + BotEngine class, concurrent async trade resolution, 100ms timer interval, tick-indexed trade maturity tracking.",
+  },
+  {
+    phase: "Phase 5",
+    phaseColor: "bg-safety-cyan/10 text-safety-cyan",
+    title: "Rise/Fall Paper Trading Module",
+    problem:
+      "All trades must be simulated locally — no Deriv proposal/buy/sell APIs. We needed a shared module for win/loss determination and payout math used by both humans and bots.",
+    solution:
+      "Built rise-fall.ts as a pure module with placeTrade() and resolveTrade(). Win condition: UP wins when exit > entry, DOWN wins when exit < entry. Same price = loss. Payout: 1.954x for Rise, 1.952x for Fall.",
+    tech: "Supabase trades table for persistence, round2() helper for float safety, configurable tick durations (1-10), shared by GameView and BotEngine.",
+  },
+  {
+    phase: "Phase 6",
+    phaseColor: "bg-rekt-crimson/10 text-rekt-crimson",
+    title: "3-Strategy Bot Framework with Tunable Hyperparameters",
+    problem:
+      "Bots needed distinct trading personalities: a conservative trend-follower, a contrarian mean-reverter, and an aggressive high-frequency gambler — each with realistic trade timing and stake sizing.",
+    solution:
+      "Implemented BotStrategyInstance interface with onTick()/reset(). Trend Follower uses dual-EMA crossover, Mean Reverter uses Bollinger Bands, HF Gambler uses momentum-biased coin flips. All share configurable hyperparameter objects.",
+    tech: "Strategy pattern with TypeScript interfaces. EMA calculations, rolling standard deviation for Bollinger Bands, cooldown timers, game-aware staking with quota urgency and role-aware sizing.",
+  },
+  {
+    phase: "Phase 7",
+    phaseColor: "bg-safety-cyan/10 text-safety-cyan",
+    title: "Pure-Function Payout Engine with Alpha Tax & Bailout",
+    problem:
+      "The core game mechanic: winners (Alphas) pay 20% of profits into a Safety Net, which bails out losers (Rescues). Surplus returns to Alphas as Spillover. Inactive players forfeit everything. Bot profits route to their hiring human.",
+    solution:
+      "Built calculatePayouts() as a pure function — no side effects, no DB calls. 5-step pipeline: classify, tax, bailout, spillover, bot-routing. All math uses round2() to prevent floating-point drift.",
+    tech: "Pure TypeScript function with PayoutInput to PayoutSummary. Deficit-sorted bailout distribution, proportional spillover, and bot profit routing via hiredBy relationship.",
+  },
+  {
+    phase: "Phase 8",
+    phaseColor: "bg-alpha-green/10 text-alpha-green",
+    title: "Post-Game Results Screen with Animated Payout Flow",
+    problem:
+      "Game ended abruptly with a basic overlay. No MVP highlight, no bot narratives, no payout flow visualization, and the player's final balance was never credited back to their global account.",
+    solution:
+      "Replaced the overlay with a full-screen PostGameView component on a dedicated 'post-game' phase. Added MVP crown with gold glow, bot narrative highlights, animated payout flow bars, balance crediting to Supabase, and Play Again flow.",
+    tech: "New PlayPhase 'post-game', PayoutSummary passed from GameView to PlayPage to PostGameView. CSS keyframe animations for crown-bounce, flow-bar, scale-in. creditPlayerBalance server action for Supabase balance refund.",
+  },
 ];
 
 export default function VibeCodingPage() {

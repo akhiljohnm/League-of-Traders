@@ -56,6 +56,41 @@ export async function getOrCreatePlayer(username: string): Promise<Player> {
 }
 
 /**
+ * Credit an amount to a player's global game_token_balance.
+ * Used after the 80/20 payout engine to refund the final balance.
+ */
+export async function creditPlayerBalance(
+  playerId: string,
+  amount: number
+): Promise<Player> {
+  const { data: current } = await supabase
+    .from("players")
+    .select("game_token_balance")
+    .eq("id", playerId)
+    .single();
+
+  if (!current) throw new Error("Player not found");
+
+  const newBalance = current.game_token_balance + amount;
+
+  const { data, error } = await supabase
+    .from("players")
+    .update({ game_token_balance: newBalance })
+    .eq("id", playerId)
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error(`Failed to credit balance: ${error?.message}`);
+  }
+
+  console.log(
+    `[Player] Credited $${amount.toFixed(2)} to ${playerId} (new balance: $${newBalance.toFixed(2)})`
+  );
+  return data as Player;
+}
+
+/**
  * Get a player by ID (for session restore from localStorage).
  */
 export async function getPlayerById(id: string): Promise<Player | null> {

@@ -1,19 +1,14 @@
 import type { DerivTick } from "@/lib/types/deriv";
-import type {
-  BotStrategyInstance,
-  TradeDecision,
-  HighFreqGamblerParams,
-} from "../types";
-import {
-  DEFAULT_HIGH_FREQ_GAMBLER_PARAMS,
-  GAME_TOTAL_TICKS,
-} from "../types";
+import type { BotStrategyInstance, TradeDecision, HighFreqGamblerParams } from "../types";
+import { DEFAULT_HIGH_FREQ_GAMBLER_PARAMS, GAME_TOTAL_TICKS } from "../types";
+import { createBrain } from "../brain";
 
 // ============================================================
-// The High-Frequency Gambler — HIGH RISK, GAME-AWARE
-// Rapid-fire micro-trades following short-term momentum.
-// Maximum volume, maximum variance. Could carry or bust.
-// Now aware of: alpha/rescue role, game clock.
+// The High-Frequency Gambler — HIGH RISK personality
+// Uses the shared AutoResearch brain for signals.
+// Personality: aggressive — trades on ANY signal regardless
+// of confidence, micro-stakes, rapid-fire volume.
+// Maximum trades, maximum variance. Could carry or bust.
 // ============================================================
 
 export function createHighFreqGambler(
@@ -21,23 +16,25 @@ export function createHighFreqGambler(
 ): BotStrategyInstance {
   const config = { ...DEFAULT_HIGH_FREQ_GAMBLER_PARAMS, ...params };
 
-  let lastPrice: number | null = null;
+  const brain = createBrain();
   let totalTicks = 0;
-  let ticksSinceLastTrade = config.tradeInterval; // Start ready
+  let ticksSinceLastTrade = config.tradeInterval;
   let tradesPlaced = 0;
+
+  /** Trades on even the weakest signal */
+  const CONFIDENCE_THRESHOLD = 0.05;
 
   return {
     name: "High-Freq Gambler",
 
     onTick(tick: DerivTick, balance: number, buyIn: number): TradeDecision | null {
-      const price = tick.quote;
-      const prevPrice = lastPrice;
-      lastPrice = price;
       totalTicks++;
       ticksSinceLastTrade++;
 
+      const signal = brain.process(tick);
+
       // Wait for minimum tick history
-      if (totalTicks < config.minTicks) return null;
+      if (totalTicks < config.minTicks || signal.warming) return null;
 
       // Role-aware interval: rescue bots trade more frequently to recover
       const isRescue = balance < buyIn;
@@ -70,30 +67,31 @@ export function createHighFreqGambler(
       );
       if (stake < minStake) return null;
 
-      // Determine direction using micro-momentum + randomness
+      // PERSONALITY: Trade on any signal, even weak ones.
+      // Use the brain's composite direction if signal exists,
+      // fall back to momentum for rapid-fire decisions.
       let direction: "UP" | "DOWN";
 
-      if (prevPrice !== null && price !== prevPrice) {
-        const momentum = price > prevPrice ? "UP" : "DOWN";
-        if (Math.random() < config.momentumBias) {
-          direction = momentum;
-        } else {
-          direction = momentum === "UP" ? "DOWN" : "UP";
-        }
+      if (Math.abs(signal.composite) >= CONFIDENCE_THRESHOLD) {
+        direction = signal.composite > 0 ? "UP" : "DOWN";
+      } else if (signal.momentum !== 0) {
+        // Follow micro-momentum when composite is flat
+        direction = signal.momentum > 0 ? "UP" : "DOWN";
       } else {
+        // No signal at all — coin flip (the gambler lives dangerously)
         direction = Math.random() < 0.5 ? "UP" : "DOWN";
       }
 
       ticksSinceLastTrade = 0;
       tradesPlaced++;
       console.log(
-        `[HFG] Trade #${tradesPlaced}: ${direction} $${stake.toFixed(2)} @ ${price.toFixed(2)} (${isRescue ? "RESCUE" : isAlpha ? "ALPHA" : "EVEN"}, interval=${effectiveInterval})`
+        `[HFG] Trade #${tradesPlaced}: ${direction} $${stake.toFixed(2)} @ ${tick.quote.toFixed(2)} (signal=${signal.composite.toFixed(3)}, ${isRescue ? "RESCUE" : isAlpha ? "ALPHA" : "EVEN"})`
       );
       return { direction, stake };
     },
 
     reset() {
-      lastPrice = null;
+      brain.reset();
       totalTicks = 0;
       ticksSinceLastTrade = config.tradeInterval;
       tradesPlaced = 0;

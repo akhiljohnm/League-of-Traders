@@ -175,45 +175,80 @@ export default function Home() {
           <h2 className="text-3xl sm:text-4xl font-bold text-center text-text-primary mb-4">
             Mercenary Bots
           </h2>
-          <p className="text-text-secondary text-center max-w-lg mx-auto mb-16">
+          <p className="text-text-secondary text-center max-w-lg mx-auto mb-4">
             Can&apos;t fill your lobby? Hire an AI teammate for $10,000. Their
             profits are your profits.
           </p>
+
+          {/* AutoResearch badge */}
+          <div className="flex justify-center mb-16">
+            <div className="inline-flex items-center gap-2 bg-bg-surface border border-border-default rounded-full px-4 py-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-alpha-green opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-alpha-green" />
+              </span>
+              <span className="text-xs text-text-secondary">
+                Powered by{" "}
+                <span className="text-text-primary font-semibold">
+                  AutoResearch
+                </span>{" "}
+                <span className="text-text-muted">
+                  — Karpathy&apos;s autonomous optimization across 5 live markets
+                </span>
+              </span>
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <BotCard
               name="The Trend Follower"
               tag="LOW RISK"
               tagColor="bg-alpha-green/10 text-alpha-green"
-              description="Rides momentum using moving averages. Steady and calculated — the reliable teammate who grinds out small, consistent gains."
+              description="Patient and selective. Only trades when the AI brain detects strong directional signals — riding confirmed momentum with calculated entries."
               traits={[
-                "Conservative stakes",
-                "Follows momentum",
-                "High win rate",
+                "High confidence threshold",
+                "6% conservative stakes",
+                "8-tick cooldown",
+                "AI signal: composite >= 0.4",
               ]}
             />
             <BotCard
               name="The Mean Reverter"
               tag="MEDIUM RISK"
               tagColor="bg-safety-cyan/10 text-safety-cyan"
-              description="Bets against the crowd when prices spike. Contrarian by nature — buys dips and sells rips for quick snaps back to the mean."
+              description="Contrarian by design. Waits for the AI brain to detect overbought or oversold conditions, then bets on the snap back to the mean."
               traits={[
-                "Contrarian plays",
-                "Spike detection",
-                "Balanced returns",
+                "Bollinger Band trigger",
+                "10% medium stakes",
+                "6-tick cooldown",
+                "AI signal: reversion only",
               ]}
             />
             <BotCard
               name="The High-Freq Gambler"
               tag="HIGH RISK"
               tagColor="bg-rekt-crimson/10 text-rekt-crimson"
-              description="Rapid-fire, low-stake trades at machine speed. Volatile and unpredictable — could carry the team or need rescuing."
+              description="Rapid-fire trades on any signal the AI brain produces — even weak ones. Maximum volume, maximum variance. Could carry the team or need rescuing."
               traits={[
-                "Maximum volume",
-                "Micro stakes",
-                "High variance",
+                "Trades on any signal",
+                "4% micro stakes",
+                "Every 4 ticks",
+                "AI signal: composite >= 0.05",
               ]}
             />
+          </div>
+
+          {/* Brain explainer */}
+          <div className="mt-10 bg-bg-surface border border-border-default rounded-xl p-6 max-w-2xl mx-auto">
+            <p className="text-text-secondary text-sm leading-relaxed text-center">
+              <span className="text-text-primary font-semibold">One brain, three personalities.</span>{" "}
+              All bots share the same AutoResearch-optimized signal engine — blending
+              EMA crossover, Bollinger Bands, and micro-momentum across{" "}
+              <span className="font-mono-numbers text-safety-cyan">5</span> volatility
+              markets. They differ in <span className="italic">how</span> they act on
+              it: confidence thresholds, stake sizing, and trade frequency. When the
+              brain improves, every bot improves.
+            </p>
           </div>
         </div>
       </section>
