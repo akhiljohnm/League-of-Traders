@@ -44,7 +44,7 @@ const PARAMS = {
   momentumWeight: 0.2,      // Weight for micro-momentum signal
 
   // Regime Detection
-  flatMarketThreshold: 0.0002, // Below this relative stddev, skip trading
+  flatMarketThreshold: 0.00015, // Below this relative stddev, skip trading
   lateGameThreshold: 0.70,  // Higher quality filter for all-in late game trades
 };
 
