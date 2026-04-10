@@ -24,6 +24,8 @@ export interface Player {
 export interface Lobby {
   id: string;
   status: LobbyStatus;
+  buy_in: number;
+  symbol: string;
   started_at: string | null;
   ended_at: string | null;
   created_at: string;

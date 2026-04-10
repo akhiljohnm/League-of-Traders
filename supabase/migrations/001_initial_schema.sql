@@ -12,7 +12,7 @@
 CREATE TABLE players (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   username TEXT NOT NULL UNIQUE,
-  game_token_balance NUMERIC(10, 2) NOT NULL DEFAULT 500.00,
+  game_token_balance NUMERIC(10, 2) NOT NULL DEFAULT 10000.00,
   is_bot BOOLEAN NOT NULL DEFAULT FALSE,
   bot_strategy TEXT, -- 'trend_follower' | 'mean_reverter' | 'high_freq_gambler' | NULL for humans
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

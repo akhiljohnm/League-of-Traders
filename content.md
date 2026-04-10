@@ -22,9 +22,9 @@
 
 ### ⚙️ WHAT is it?
 A real-time, browser-based web application powered by the Deriv API. 
-* **The Setup:** 5 players enter a lobby and are granted $500 in virtual Game Tokens.
+* **The Setup:** 5 players enter a lobby and are granted $10,000 in virtual Game Tokens.
 * **The Gameplay:** A synchronized 5-minute frenzy where players place UP/DOWN predictions based on live Deriv market ticks.
-* **The Math (80/20 System):** At the end of the round, profitable players keep 80% of their gains and pay a 20% "tax" into a Safety Net fund. This fund automatically bails out the losing players (capped at their original $500). 
+* **The Math (80/20 System):** At the end of the round, profitable players keep 80% of their gains and pay a 20% "tax" into a Safety Net fund. This fund automatically bails out the losing players (capped at their original $10,000). 
 
 ### ⏱️ WHEN does the action happen?
 League of Traders is designed around **high-octane micro-sessions**. 

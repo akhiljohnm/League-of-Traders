@@ -69,6 +69,26 @@ const ENTRIES: VibeEntryData[] = [
       "Built a client-side Navbar with IntersectionObserver for active section detection, glassmorphism effect, mobile hamburger menu, and hybrid routing — anchor scrolls for homepage sections, Next.js Link for the /vibe-coding page.",
     tech: "IntersectionObserver with rootMargin '-40% 0px -55% 0px', nav-glass CSS with backdrop-blur, usePathname() for route-aware active states.",
   },
+  {
+    phase: "Phase 3",
+    phaseColor: "bg-rekt-crimson/10 text-rekt-crimson",
+    title: "V3 to V2 API Correction via llms.md",
+    problem:
+      "Initial research pointed to the old Deriv v3 WebSocket API. The llms.md doc revealed the correct V2 API with a completely different URL, symbol naming, and no app_id requirement.",
+    solution:
+      "Audited llms.md: public WS is wss://api.derivws.com/trading/v1/options/ws/public, symbol is 1HZ100V (not R_100), forget_all takes an array, and pinging every 30s is mandatory.",
+    tech: "Updated .env.local, built TypeScript types in src/lib/types/deriv.ts matching exact V2 response shapes.",
+  },
+  {
+    phase: "Phase 3",
+    phaseColor: "bg-alpha-green/10 text-alpha-green",
+    title: "useDerivTicker — Production WebSocket Hook",
+    problem:
+      "Need a React hook managing the full WebSocket lifecycle: connect, subscribe, ping, error handling, exponential backoff reconnect, and clean unmount.",
+    solution:
+      "Built useDerivTicker with 25s ping interval, subscription ID tracking, forget_all cleanup on unmount, and exponential backoff (1s to 30s cap). LiveTicker component shows live quote with green/red glow.",
+    tech: "src/hooks/useDerivTicker.ts returns { currentTick, previousTick, isConnected, connectionState, error, tickCount }. LiveTicker embedded in homepage hero.",
+  },
 ];
 
 export default function VibeCodingPage() {

@@ -1,4 +1,6 @@
+import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import LiveTicker from "@/components/LiveTicker";
 
 export default function Home() {
   return (
@@ -29,7 +31,7 @@ export default function Home() {
             <span className="text-gradient-cyan">TRADERS</span>
           </h1>
 
-          <p className="text-lg sm:text-xl text-text-secondary max-w-xl mx-auto mb-10 animate-fade-up stagger-2">
+          <p className="text-lg sm:text-xl text-text-secondary max-w-xl mx-auto mb-8 animate-fade-up stagger-2">
             5 players. 5 minutes. Live markets.
             <br />
             <span className="text-text-primary font-medium">
@@ -37,13 +39,18 @@ export default function Home() {
             </span>
           </p>
 
-          <div className="animate-fade-up stagger-3">
-            <a
-              href="#join"
+          {/* Live Price Feed */}
+          <div className="mb-8 animate-fade-up stagger-3">
+            <LiveTicker />
+          </div>
+
+          <div className="animate-fade-up stagger-4">
+            <Link
+              href="/play"
               className="inline-block py-4 px-10 bg-safety-cyan text-bg-primary font-bold text-lg rounded-xl btn-glow cursor-pointer"
             >
               JOIN THE LEAGUE
-            </a>
+            </Link>
           </div>
 
           <p className="text-text-muted text-sm mt-6 animate-fade-up stagger-4">
@@ -86,7 +93,7 @@ export default function Home() {
             <StepCard
               step="01"
               title="Assemble Your Squad"
-              description="5 players join a lobby — humans or AI Mercenary Bots. Everyone puts up $500 Game Tokens. No one trades alone."
+              description="5 players join a lobby — humans or AI Mercenary Bots. Everyone puts up $10,000 Game Tokens. No one trades alone."
               accent="safety-cyan"
             />
             <StepCard
@@ -127,7 +134,7 @@ export default function Home() {
               title="Alpha Winners"
               items={[
                 "Keep 80% of net profit",
-                "Get your $500 buy-in back",
+                "Get your $10,000 buy-in back",
                 "Receive Victory Spillover from unused Safety Net",
               ]}
             />
@@ -137,7 +144,7 @@ export default function Home() {
               title="Rescued Players"
               items={[
                 "Split the 20% Safety Net fund evenly",
-                "Bailout capped at $500 — never more",
+                "Bailout capped at $10,000 — never more",
                 "Stay in the game for the next round",
               ]}
             />
@@ -169,7 +176,7 @@ export default function Home() {
             Mercenary Bots
           </h2>
           <p className="text-text-secondary text-center max-w-lg mx-auto mb-16">
-            Can&apos;t fill your lobby? Hire an AI teammate for $500. Their
+            Can&apos;t fill your lobby? Hire an AI teammate for $10,000. Their
             profits are your profits.
           </p>
 
@@ -223,18 +230,18 @@ export default function Home() {
             Pick a name. Join a lobby. Prove you belong.
           </p>
 
-          <a
-            href="#join"
+          <Link
+            href="/play"
             className="inline-block py-4 px-12 bg-safety-cyan text-bg-primary font-bold text-lg rounded-xl btn-glow cursor-pointer"
           >
             JOIN THE LEAGUE
-          </a>
+          </Link>
 
           {/* Stats row */}
           <div className="flex items-center justify-center gap-8 mt-12 text-text-muted text-sm">
             <Stat value="5" label="Players" />
             <span className="text-border-hover">|</span>
-            <Stat value="$500" label="Buy-in" />
+            <Stat value="$10,000" label="Buy-in" />
             <span className="text-border-hover">|</span>
             <Stat value="5:00" label="Per Round" />
             <span className="text-border-hover">|</span>

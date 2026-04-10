@@ -11,7 +11,7 @@
 - [x] Create a Supabase project and secure the `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 - [x] Register an application on the Deriv API Hub to generate the `app_id`.
 - [x] Setup `.env.local` for local development.
-- [ ] Push initial commit to GitHub and deploy to Vercel.
+- [x] Push initial commit to GitHub and deploy to Vercel.
 
 ## Phase 2: The Database Ledger (Supabase Schema) 🗄️
 *Goal: Build the custom backend to manage virtual funds and multiplayer lobbies.*
@@ -22,41 +22,42 @@
 
 ## Phase 3: The Price Oracle (Deriv API Integration) 📈
 *Goal: Connect to Deriv's WebSockets to stream live market data.*
-- [ ] Write a custom React Hook (`useDerivTicker`) to manage the WebSocket connection.
-- [ ] Subscribe to a continuous index tick stream (e.g., Volatility 100 Index).
-- [ ] Build a basic frontend component to verify the live price stream is updating in real-time.
+- [x] Write a custom React Hook (`useDerivTicker`) to manage the WebSocket connection.
+- [x] Subscribe to a continuous index tick stream (e.g., Volatility 100 Index).
+- [x] Build a basic frontend component to verify the live price stream is updating in real-time.
 
 ## Phase 4: Player Onboarding & Matchmaking 🤝
 *Goal: Allow users to "login" and automatically group into 5-player lobbies.*
-- [ ] Build a lightweight login/username creation screen.
-- [ ] Grant new users exactly $500 Game Tokens upon creation.
-- [ ] Build the Lobby UI ("Waiting for players...").
-- [ ] Implement Supabase Realtime subscriptions to update the lobby UI instantly.
-- [ ] **NEW:** Add "Hire Mercenary Bot" button. User pays a $500 virtual buy-in fee to fill an empty lobby slot with an AI bot.
+- [x] Build a lightweight login/username creation screen.
+- [x] Grant new users exactly $10,000 Game Tokens upon creation.
+- [x] Build the Lobby UI ("Waiting for players...").
+- [x] Implement Supabase Realtime subscriptions to update the lobby UI instantly.
+- [x] **NEW:** Add "Hire Mercenary Bot" button. User pays variable buy-in fee (min $100) to fill an empty lobby slot with an AI bot.
 
 ## Phase 5: The Game Loop & Paper Trading Engine ⚔️
 *Goal: The core gameplay where humans make trades against the live Deriv Oracle.*
-- [ ] Implement a synchronized 5-minute global game timer.
-- [ ] Build the Trading UI (Live chart, current balance, UP/DOWN buttons).
-- [ ] Write the function to log human trades in the `trades` database using the live Deriv price.
-- [ ] Write the auto-resolution logic (e.g., evaluating if a trade won/lost after 10 ticks).
+- [x] Implement a synchronized 5-minute global game timer.
+- [x] Build the Trading UI (Live chart, current balance, UP/DOWN buttons).
+- [x] Write the function to log human trades in the `trades` database using the live Deriv price.
+- [x] Write the auto-resolution logic (e.g., evaluating if a trade won/lost after 10 ticks).
 
 ## Phase 6: Autonomous AI Bots (The Karpathy Protocol) 🤖
 *Goal: Implement 3 distinct bot trading strategies refined by AI auto-research.*
-- [ ] Define Bot 1: **"The Trend Follower"** (Uses moving average logic; trades cautiously).
-- [ ] Define Bot 2: **"The Mean Reverter"** (Bets on reversals when prices spike; medium risk).
-- [ ] Define Bot 3: **"The High-Frequency Gambler"** (Rapid-fire, low-stake trades; highly volatile).
-- [ ] Use Andrej Karpathy’s `auto-research` framework to simulate historical Deriv tick data and fine-tune the hyper-parameters for these 3 strategies.
-- [ ] Write the Next.js backend Cron/Interval job that allows the hired bots to automatically push trades into the `trades` table during the 5-minute game loop alongside the human player.
+- [x] Define Bot 1: **"The Trend Follower"** (EMA crossover strategy; conservative 5-8% stakes, cooldown between trades).
+- [x] Define Bot 2: **"The Mean Reverter"** (Bollinger Band reversion; medium 8-12% stakes, contrarian plays on spikes).
+- [x] Define Bot 3: **"The High-Frequency Gambler"** (Rapid-fire every 4 ticks; micro-momentum with 65% bias, 3-5% stakes).
+- [x] Use Andrej Karpathy’s `auto-research` framework to simulate historical Deriv tick data and fine-tune the hyper-parameters for these 3 strategies.
+- [x] Write the BotEngine class that processes live ticks, feeds them to bot strategies, executes trades to the `trades` table, and auto-resolves after 5 ticks with 1.85x payout multiplier.
+- [x] Make bot strategies game-aware: quota urgency (force trades to avoid inactive forfeit), role-aware staking (rescue=aggressive, alpha=conservative), late-game caution.
 
 ## Phase 7: The 80/20 Payout Math (The Core Engine) 🧠
 *Goal: Execute the profit contribution game theory when the timer ends.*
-- [ ] Lock the game UI when the timer hits 00:00.
-- [ ] Fetch the final balances of all 5 entities (humans + bots).
-- [ ] Execute the 80/20 Math: Deduct the 20% Safety Net tax from Alphas (winners).
-- [ ] Distribute Bailouts to Rescues (losers, including busted bots).
-- [ ] Route the final Net Profit of hired bots back to the human who paid their buy-in.
-- [ ] Update all final balances in the Supabase database.
+- [x] Lock the game UI when the timer hits 00:00.
+- [x] Fetch the final balances of all 5 entities (humans + bots).
+- [x] Execute the 80/20 Math: Deduct the 20% Safety Net tax from Alphas (winners).
+- [x] Distribute Bailouts to Rescues (losers, including busted bots).
+- [x] Route the final Net Profit of hired bots back to the human who paid their buy-in.
+- [x] Update all final balances in the Supabase database.
 
 ## Phase 8: Post-Game Leaderboard & Polish ✨
 *Goal: Provide a satisfying UX conclusion and finalize deliverables.*

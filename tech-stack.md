@@ -27,7 +27,7 @@ To build this rapidly and deploy it reliably, we will use a modern JavaScript/Ty
 
 ### Step 1: User Initialization & The Bank (Supabase)
 * **How it works:** We bypass complex OAuth. When a user opens the app, they just enter a username (or we auto-generate one).
-* **Action:** We create a new user record in Supabase and instantly credit them with a starting balance of **$500 Game Tokens**.
+* **Action:** We create a new user record in Supabase and instantly credit them with a starting balance of **$10,000 Game Tokens**.
 
 ### Step 2: The Lobby System (Supabase Realtime)
 * **How it works:** Users click "Find Game." They are inserted into a Supabase `lobbies` table.

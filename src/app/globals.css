@@ -160,6 +160,54 @@ html {
   background: linear-gradient(90deg, transparent, var(--color-border-hover), transparent);
 }
 
+/* Green UP button glow */
+.btn-glow-green {
+  box-shadow: 0 0 20px rgba(0, 255, 163, 0.3), 0 0 60px rgba(0, 255, 163, 0.1);
+  transition: all 0.2s ease;
+}
+.btn-glow-green:hover {
+  box-shadow: 0 0 30px rgba(0, 255, 163, 0.5), 0 0 80px rgba(0, 255, 163, 0.2);
+  transform: translateY(-1px);
+}
+
+/* Red DOWN button glow */
+.btn-glow-red {
+  box-shadow: 0 0 20px rgba(255, 51, 102, 0.3), 0 0 60px rgba(255, 51, 102, 0.1);
+  transition: all 0.2s ease;
+}
+.btn-glow-red:hover {
+  box-shadow: 0 0 30px rgba(255, 51, 102, 0.5), 0 0 80px rgba(255, 51, 102, 0.2);
+  transform: translateY(-1px);
+}
+
+/* Win flash for resolved trades */
+@keyframes win-flash {
+  0% { background-color: rgba(0, 255, 163, 0.2); }
+  100% { background-color: transparent; }
+}
+.animate-win-flash {
+  animation: win-flash 0.8s ease-out;
+}
+
+/* Loss flash for resolved trades */
+@keyframes loss-flash {
+  0% { background-color: rgba(255, 51, 102, 0.2); }
+  100% { background-color: transparent; }
+}
+.animate-loss-flash {
+  animation: loss-flash 0.8s ease-out;
+}
+
+/* Timer urgency pulse (below 30s) */
+@keyframes timer-urgent {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-timer-urgent {
+  animation: timer-urgent 1s ease-in-out infinite;
+  color: var(--color-rekt-crimson);
+}
+
 /* Scrollbar styling for dark theme */
 ::-webkit-scrollbar {
   width: 6px;
