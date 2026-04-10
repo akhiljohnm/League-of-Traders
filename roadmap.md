@@ -63,6 +63,14 @@ The AutoResearch loop (`research/strategy.ts`) optimizes a single core signal en
 - [x] `analysis.ipynb` for visualizing experiment results (score trajectory, best progression).
 - [x] Baseline avg_score: **9.69** across 7 datasets (101 trades).
 
+**Bot Subscription System** ($200/month recurring revenue):
+- [x] Create `bot_subscriptions` table in Supabase (player_id, bot_strategy, expires_at, is_active). UNIQUE per player+strategy.
+- [x] Build subscription backend (`src/lib/actions/subscription.ts`): purchase, lazy auto-renewal on access, lock on insufficient funds.
+- [x] Gate bot hiring behind active subscription — `hireMercenaryBot()` checks `hasActiveSubscription()` before allowing hire.
+- [x] Homepage: bots display as LOCKED with $200/mo pricing, lock icons, and "Subscribe to Unlock" CTA. Revenue model explainer cards.
+- [x] Lobby: subscription-aware bot selector — locked bots show Subscribe button ($200/mo), unlocked bots show Hire button (lobby buy-in). Subscribe flow deducts $200, instantly unlocks.
+- [x] Auto-renewal: on access, if subscription expired + balance >= $200 → auto-renew 30 days. If balance < $200 → lock bot. No cron needed.
+
 ## Phase 7: The 80/20 Payout Math (The Core Engine) 🧠
 *Goal: Execute the profit contribution game theory when the timer ends.*
 - [x] Lock the game UI when the timer hits 00:00.

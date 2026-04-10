@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useDerivTicker } from "@/hooks/useDerivTicker";
 import { BotEngine } from "@/lib/bots/engine";
 import {
   placeTrade as placeTradeToDb,
   resolveTrade as resolveTradeInDb,
+  getPayoutMultiplier,
 } from "@/lib/game/rise-fall";
 import {
   endGame,
@@ -17,6 +18,7 @@ import {
   type PayoutSummary,
   type PayoutInput,
 } from "@/lib/game/payout-engine";
+import { supabase } from "@/lib/supabase";
 import type { DerivTick } from "@/lib/types/deriv";
 import type {
   Player,
@@ -127,8 +129,27 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
     Map<string, { balance: number; tradeCount: number }>
   >(new Map());
 
+  // Other human players' balances tracked via Supabase Realtime
+  const [otherHumanBalances, setOtherHumanBalances] = useState<
+    Map<string, { balance: number; tradeCount: number }>
+  >(() => {
+    const initial = new Map<string, { balance: number; tradeCount: number }>();
+    for (const lp of allPlayers) {
+      if (lp.player.id !== currentPlayer.id && !lp.player.is_bot) {
+        initial.set(lp.player.id, { balance: buyIn, tradeCount: 0 });
+      }
+    }
+    return initial;
+  });
+
   // Tick index for trade resolution
   const tickIndexRef = useRef(0);
+
+  // Prevent double-click trade placement (debounce guard)
+  const lastTradeTimeRef = useRef(0);
+
+  // Prevent double trade resolution
+  const resolvedTradeIdsRef = useRef(new Set<string>());
 
   // Prevent double game-end
   const gameEndedRef = useRef(false);
@@ -146,6 +167,108 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
       `[GameEngine] Initialized with ${engine.botCount} bots for lobby ${lobbyId}`
     );
   }, [lobbyId, allPlayers]);
+
+  // ---- Subscribe to other players' trades via Supabase Realtime ----
+  useEffect(() => {
+    const otherHumanIds = allPlayers
+      .filter((lp) => lp.player.id !== currentPlayer.id && !lp.player.is_bot)
+      .map((lp) => lp.player.id);
+
+    if (otherHumanIds.length === 0) return;
+
+    console.log(
+      `[GameEngine] Subscribing to trades Realtime for ${otherHumanIds.length} teammate(s) in lobby ${lobbyId}`
+    );
+
+    const channel = supabase
+      .channel(`game-trades-${lobbyId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "trades",
+          filter: `lobby_id=eq.${lobbyId}`,
+        },
+        (payload) => {
+          const row = payload.new as {
+            player_id: string;
+            stake: number;
+            direction: TradeDirection;
+          };
+          // Only track other humans (not current player, not bots)
+          if (!otherHumanIds.includes(row.player_id)) return;
+
+          console.log(
+            `[GameEngine] Teammate ${row.player_id} placed ${row.direction} $${row.stake} trade`
+          );
+
+          setOtherHumanBalances((prev) => {
+            const next = new Map(prev);
+            const current = next.get(row.player_id) ?? {
+              balance: buyIn,
+              tradeCount: 0,
+            };
+            next.set(row.player_id, {
+              balance: current.balance - row.stake,
+              tradeCount: current.tradeCount + 1,
+            });
+            return next;
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "trades",
+          filter: `lobby_id=eq.${lobbyId}`,
+        },
+        (payload) => {
+          const row = payload.new as {
+            player_id: string;
+            stake: number;
+            direction: TradeDirection;
+            status: string;
+            payout: number | null;
+          };
+          if (!otherHumanIds.includes(row.player_id)) return;
+          if (row.status !== "won" && row.status !== "lost") return;
+
+          // Calculate gross payout the same way rise-fall.ts does
+          const grossPayout =
+            row.status === "won"
+              ? Math.round(row.stake * getPayoutMultiplier(row.direction) * 100) / 100
+              : 0;
+
+          console.log(
+            `[GameEngine] Teammate ${row.player_id} trade ${row.status}: ${row.status === "won" ? `+$${grossPayout}` : `-$${row.stake}`}`
+          );
+
+          setOtherHumanBalances((prev) => {
+            const next = new Map(prev);
+            const current = next.get(row.player_id) ?? {
+              balance: buyIn,
+              tradeCount: 0,
+            };
+            next.set(row.player_id, {
+              ...current,
+              balance: current.balance + grossPayout,
+            });
+            return next;
+          });
+        }
+      )
+      .subscribe((status) => {
+        console.log(`[GameEngine] Trades Realtime status: ${status}`);
+      });
+
+    return () => {
+      console.log("[GameEngine] Unsubscribing from trades Realtime");
+      supabase.removeChannel(channel);
+    };
+  }, [lobbyId, allPlayers, currentPlayer.id, buyIn]);
 
   // ---- Transition to active once connected ----
   useEffect(() => {
@@ -188,6 +311,10 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
       const resolved: ResolvedTrade[] = [];
 
       for (const trade of currentPending) {
+        // Skip if already resolved by the tick effect
+        if (resolvedTradeIdsRef.current.has(trade.tradeId)) continue;
+        resolvedTradeIdsRef.current.add(trade.tradeId);
+
         try {
           const result = await resolveTradeInDb({
             tradeId: trade.tradeId,
@@ -236,8 +363,10 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
         rawBalance = botEngineRef.current.getBotBalance(lp.player.id);
         tradeCount = botEngineRef.current.getBotTradeCount(lp.player.id);
       } else {
-        rawBalance = buyIn;
-        tradeCount = 0;
+        // Other humans — use Realtime-tracked balances
+        const otherData = otherHumanBalances.get(lp.player.id);
+        rawBalance = otherData?.balance ?? buyIn;
+        tradeCount = otherData?.tradeCount ?? 0;
       }
 
       return {
@@ -289,7 +418,7 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
 
     setGamePhase("finished");
     console.log("[GameEngine] Game FINISHED");
-  }, [currentTick, lobbyId, allPlayers, currentPlayer.id, buyIn, humanBalance, humanTradeCount]);
+  }, [currentTick, lobbyId, allPlayers, currentPlayer.id, buyIn, humanBalance, humanTradeCount, otherHumanBalances]);
 
   useEffect(() => {
     if (timeRemainingMs <= 0 && gamePhase === "active") {
@@ -326,45 +455,43 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
     }
 
     // Resolve matured human trades
+    // Step 1: Pure state update — separate matured from remaining (no side effects)
     setPendingTrades((prev) => {
-      const matured: PendingHumanTrade[] = [];
       const remaining: PendingHumanTrade[] = [];
 
       for (const trade of prev) {
         if (currentTickIdx - trade.entryTickIndex >= trade.tickDuration) {
-          matured.push(trade);
+          // Queue resolution outside updater via dedup-guarded ref
+          if (!resolvedTradeIdsRef.current.has(trade.tradeId)) {
+            resolvedTradeIdsRef.current.add(trade.tradeId);
+
+            resolveTradeInDb({
+              tradeId: trade.tradeId,
+              entryPrice: trade.entryPrice,
+              exitPrice: currentTick.quote,
+              direction: trade.direction,
+              stake: trade.stake,
+            }).then((result) => {
+              setHumanBalance((b) => b + result.grossPayout);
+
+              setTradeHistory((h) => [
+                {
+                  tradeId: trade.tradeId,
+                  direction: trade.direction,
+                  stake: trade.stake,
+                  entryPrice: trade.entryPrice,
+                  exitPrice: currentTick.quote,
+                  status: result.status as "won" | "lost",
+                  grossPayout: result.grossPayout,
+                  netPnl: result.netPnl,
+                  resolvedAt: Date.now(),
+                },
+                ...h,
+              ]);
+            });
+          }
         } else {
           remaining.push(trade);
-        }
-      }
-
-      if (matured.length > 0) {
-        // Resolve matured trades asynchronously
-        for (const trade of matured) {
-          resolveTradeInDb({
-            tradeId: trade.tradeId,
-            entryPrice: trade.entryPrice,
-            exitPrice: currentTick.quote,
-            direction: trade.direction,
-            stake: trade.stake,
-          }).then((result) => {
-            setHumanBalance((b) => b + result.grossPayout);
-
-            setTradeHistory((h) => [
-              {
-                tradeId: trade.tradeId,
-                direction: trade.direction,
-                stake: trade.stake,
-                entryPrice: trade.entryPrice,
-                exitPrice: currentTick.quote,
-                status: result.status as "won" | "lost",
-                grossPayout: result.grossPayout,
-                netPnl: result.netPnl,
-                resolvedAt: Date.now(),
-              },
-              ...h,
-            ]);
-          });
         }
       }
 
@@ -376,9 +503,14 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
   // ---- Place a human trade ----
   const placeHumanTrade = useCallback(
     async (direction: TradeDirection, stake: number, tickDuration: number) => {
+      // Debounce: prevent accidental double-clicks (300ms cooldown)
+      const now = Date.now();
+      if (now - lastTradeTimeRef.current < 300) return;
       if (!currentTick || isGameOver || stake <= 0 || stake > humanBalance) {
         return;
       }
+
+      lastTradeTimeRef.current = now;
 
       // Optimistic: deduct stake
       setHumanBalance((b) => b - stake);
@@ -421,42 +553,46 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
   const canTrade =
     gamePhase === "active" && !!currentTick && isConnected && humanBalance > 0;
 
-  // ---- Compute player balances ----
-  const playerBalances: PlayerBalance[] = allPlayers.map((lp) => {
-    const isMe = lp.player.id === currentPlayer.id;
-    const isBot = lp.player.is_bot;
+  // ---- Compute player balances (memoized to avoid re-render storms) ----
+  const playerBalances: PlayerBalance[] = useMemo(() => {
+    const balances = allPlayers.map((lp) => {
+      const isMe = lp.player.id === currentPlayer.id;
+      const isBot = lp.player.is_bot;
 
-    let balance: number;
-    let tradeCount: number;
+      let balance: number;
+      let tradeCount: number;
 
-    if (isMe) {
-      balance = humanBalance;
-      tradeCount = humanTradeCount;
-    } else if (isBot) {
-      const botData = botBalances.get(lp.player.id);
-      balance = botData?.balance ?? buyIn;
-      tradeCount = botData?.tradeCount ?? 0;
-    } else {
-      // Other humans — not tracked locally in MVP
-      balance = buyIn;
-      tradeCount = 0;
-    }
+      if (isMe) {
+        balance = humanBalance;
+        tradeCount = humanTradeCount;
+      } else if (isBot) {
+        const botData = botBalances.get(lp.player.id);
+        balance = botData?.balance ?? buyIn;
+        tradeCount = botData?.tradeCount ?? 0;
+      } else {
+        // Other humans — tracked via Supabase Realtime
+        const otherData = otherHumanBalances.get(lp.player.id);
+        balance = otherData?.balance ?? buyIn;
+        tradeCount = otherData?.tradeCount ?? 0;
+      }
 
-    return {
-      playerId: lp.player.id,
-      username: lp.player.username,
-      isBot,
-      botStrategy: lp.player.bot_strategy,
-      balance,
-      initialBalance: buyIn,
-      tradeCount,
-      pnl: Math.round((balance - buyIn) * 100) / 100,
-      isCurrentPlayer: isMe,
-    };
-  });
+      return {
+        playerId: lp.player.id,
+        username: lp.player.username,
+        isBot,
+        botStrategy: lp.player.bot_strategy,
+        balance,
+        initialBalance: buyIn,
+        tradeCount,
+        pnl: Math.round((balance - buyIn) * 100) / 100,
+        isCurrentPlayer: isMe,
+      };
+    });
 
-  // Sort by balance descending
-  playerBalances.sort((a, b) => b.balance - a.balance);
+    // Sort by balance descending
+    balances.sort((a, b) => b.balance - a.balance);
+    return balances;
+  }, [allPlayers, currentPlayer.id, humanBalance, humanTradeCount, botBalances, otherHumanBalances, buyIn]);
 
   return {
     currentTick,

@@ -8,12 +8,19 @@ import {
   startLobby,
   getLobby,
 } from "@/lib/actions/lobby";
+import {
+  getPlayerSubscriptions,
+  purchaseBotSubscription,
+} from "@/lib/actions/subscription";
 import type {
   Player,
   LobbyPlayer,
   BotStrategy,
+  BotSubscription,
   Lobby,
 } from "@/lib/types/database";
+import { BOT_SUBSCRIPTION_COST } from "@/lib/types/database";
+import BotSubscribeDialog, { BOT_CATALOG, type BotInfo } from "./BotSubscribeDialog";
 
 interface LobbyViewProps {
   lobbyId: string;
@@ -60,12 +67,16 @@ export default function LobbyView({
   const [slots, setSlots] = useState<LobbySlot[]>([]);
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [isHiring, setIsHiring] = useState(false);
+  const [isSubscribing, setIsSubscribing] = useState<BotStrategy | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [showBotMenu, setShowBotMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playerBalance, setPlayerBalance] = useState(
     currentPlayer.game_token_balance
   );
+  const [subscriptions, setSubscriptions] = useState<BotSubscription[]>([]);
+  const [dialogBot, setDialogBot] = useState<BotInfo | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
 
   const loadPlayers = useCallback(async () => {
     try {
@@ -88,14 +99,34 @@ export default function LobbyView({
       if (data.status === "locked") {
         onLobbyLocked(lobbyId);
       }
+      if (data.status === "in_progress") {
+        console.log("[LobbyView] Lobby already in_progress on load — navigating to game");
+        onGameStart(lobbyId);
+      }
     }
-  }, [lobbyId, onLobbyLocked]);
+  }, [lobbyId, onLobbyLocked, onGameStart]);
+
+  const loadSubscriptions = useCallback(async () => {
+    try {
+      const subs = await getPlayerSubscriptions(currentPlayer.id);
+      setSubscriptions(subs);
+    } catch (err) {
+      console.error("[LobbyView] Failed to load subscriptions:", err);
+    }
+  }, [currentPlayer.id]);
+
+  const isStrategySubscribed = (strategy: BotStrategy): boolean => {
+    return subscriptions.some(
+      (s) => s.bot_strategy === strategy && s.is_active
+    );
+  };
 
   // Initial load
   useEffect(() => {
     loadPlayers();
     loadLobby();
-  }, [loadPlayers, loadLobby]);
+    loadSubscriptions();
+  }, [loadPlayers, loadLobby, loadSubscriptions]);
 
   // Supabase Realtime subscription for lobby_players
   useEffect(() => {
@@ -133,6 +164,10 @@ export default function LobbyView({
           if (updated.status === "locked") {
             onLobbyLocked(lobbyId);
           }
+          if (updated.status === "in_progress") {
+            console.log("[LobbyView] Game started — redirecting to game screen");
+            onGameStart(lobbyId);
+          }
         }
       )
       .subscribe((status) => {
@@ -143,7 +178,7 @@ export default function LobbyView({
       console.log("[LobbyView] Unsubscribing from Realtime");
       supabase.removeChannel(channel);
     };
-  }, [lobbyId, loadPlayers, onLobbyLocked]);
+  }, [lobbyId, loadPlayers, onLobbyLocked, onGameStart]);
 
   // Refresh player balance periodically
   useEffect(() => {
@@ -185,23 +220,55 @@ export default function LobbyView({
     }
   };
 
+  const openSubscribeDialog = (strategy: BotStrategy) => {
+    const bot = BOT_CATALOG.find((b) => b.strategy === strategy);
+    if (bot) {
+      setDialogError(null);
+      setDialogBot(bot);
+    }
+  };
+
+  const handleSubscribeConfirm = async () => {
+    if (!dialogBot) return;
+    setIsSubscribing(dialogBot.strategy);
+    setDialogError(null);
+    try {
+      await purchaseBotSubscription(currentPlayer.id, dialogBot.strategy);
+      console.log(`[LobbyView] Subscribed to ${dialogBot.strategy}`);
+      await loadSubscriptions();
+      // Refresh balance
+      const { data } = await supabase
+        .from("players")
+        .select("game_token_balance")
+        .eq("id", currentPlayer.id)
+        .single();
+      if (data) setPlayerBalance(data.game_token_balance);
+      setDialogBot(null);
+    } catch (err) {
+      setDialogError(err instanceof Error ? err.message : "Failed to subscribe");
+    } finally {
+      setIsSubscribing(null);
+    }
+  };
+
   const handleStartGame = async () => {
     setIsStarting(true);
     setError(null);
     try {
-      await startLobby(lobbyId);
+      await startLobby(lobbyId, currentPlayer.id);
       console.log(`[LobbyView] Lobby started with ${slots.length} players`);
+      // Owner navigates immediately — other players navigate via Realtime UPDATE handler
       onGameStart(lobbyId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start lobby");
-    } finally {
       setIsStarting(false);
     }
   };
 
   const emptySlots = MAX_LOBBY_SIZE - slots.length;
   const isLocked = lobby?.status === "locked";
-  const canStart = slots.length >= MIN_LOBBY_SIZE && !isLocked;
+  const isOwner = lobby?.owner_id === currentPlayer.id;
+  const canStart = slots.length >= MIN_LOBBY_SIZE && !isLocked && isOwner;
   const buyIn = lobby?.buy_in ?? 100;
 
   return (
@@ -278,6 +345,7 @@ export default function LobbyView({
             index={i + 1}
             player={slot.player}
             isCurrentPlayer={slot.player.id === currentPlayer.id}
+            isOwner={slot.player.id === lobby?.owner_id}
             hiredBy={slot.lobbyPlayer.hired_by}
             buyIn={buyIn}
           />
@@ -296,7 +364,7 @@ export default function LobbyView({
         </div>
       )}
 
-      {/* Start Game Button */}
+      {/* Start Game Button (owner only) */}
       {canStart && (
         <div className="mb-6">
           <button
@@ -311,6 +379,15 @@ export default function LobbyView({
           </button>
           <p className="text-text-muted text-xs text-center mt-2">
             Minimum {MIN_LOBBY_SIZE} players required. You can add more or start now.
+          </p>
+        </div>
+      )}
+
+      {/* Non-owner waiting message */}
+      {!isOwner && !isLocked && slots.length >= MIN_LOBBY_SIZE && (
+        <div className="mb-6 text-center">
+          <p className="text-text-muted text-sm">
+            Waiting for lobby owner to start the game...
           </p>
         </div>
       )}
@@ -350,29 +427,67 @@ export default function LobbyView({
                   BotStrategy,
                   (typeof STRATEGY_META)[BotStrategy],
                 ][]
-              ).map(([strategy, meta]) => (
-                <button
-                  key={strategy}
-                  onClick={() => handleHireBot(strategy)}
-                  disabled={isHiring}
-                  className="bg-bg-primary border border-border-default rounded-xl p-4 text-left
-                             hover:border-border-hover disabled:opacity-40 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-text-primary font-semibold text-sm">
-                      {meta.label}
-                    </span>
-                    <span
-                      className={`${meta.tagColor} text-[9px] font-mono-numbers font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border`}
-                    >
-                      {meta.tag}
-                    </span>
-                  </div>
-                  <span className="text-text-muted text-xs">
-                    ${buyIn.toLocaleString()} buy-in
-                  </span>
-                </button>
-              ))}
+              ).map(([strategy, meta]) => {
+                const subscribed = isStrategySubscribed(strategy);
+                const subscribingThis = isSubscribing === strategy;
+
+                return subscribed ? (
+                  /* UNLOCKED — can hire */
+                  <button
+                    key={strategy}
+                    onClick={() => handleHireBot(strategy)}
+                    disabled={isHiring}
+                    className="bg-bg-primary border border-alpha-green/30 rounded-xl p-4 text-left
+                               hover:border-alpha-green/60 disabled:opacity-40 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-text-primary font-semibold text-sm">
+                        {meta.label}
+                      </span>
+                      <span
+                        className={`${meta.tagColor} text-[9px] font-mono-numbers font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border`}
+                      >
+                        {meta.tag}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-text-muted text-xs">
+                        ${buyIn.toLocaleString()} buy-in
+                      </span>
+                      <span className="text-[9px] text-alpha-green font-mono-numbers font-bold bg-alpha-green/10 px-1.5 py-0.5 rounded">
+                        UNLOCKED
+                      </span>
+                    </div>
+                  </button>
+                ) : (
+                  /* LOCKED — must subscribe */
+                  <button
+                    key={strategy}
+                    onClick={() => openSubscribeDialog(strategy)}
+                    disabled={!!isSubscribing}
+                    className="relative bg-bg-primary border border-border-default rounded-xl p-4 text-left
+                               hover:border-safety-cyan/40 disabled:opacity-40 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-text-muted font-semibold text-sm">
+                        {meta.label}
+                      </span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-text-muted">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-text-muted text-xs">
+                        <span className="font-mono-numbers text-text-secondary font-bold">${BOT_SUBSCRIPTION_COST}</span>/mo
+                      </span>
+                      <span className="text-[9px] text-safety-cyan font-mono-numbers font-bold bg-safety-cyan/10 px-1.5 py-0.5 rounded">
+                        {subscribingThis ? "SUBSCRIBING..." : "SUBSCRIBE"}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -388,17 +503,34 @@ export default function LobbyView({
           <p className="text-text-secondary text-sm mb-4">
             {slots.length} players in the arena.
           </p>
-          <button
-            onClick={handleStartGame}
-            disabled={isStarting}
-            className="px-8 py-3 bg-alpha-green text-bg-primary font-bold text-lg rounded-xl
-                       cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-all
-                       hover:brightness-110 active:scale-[0.98]"
-            style={{ boxShadow: "0 0 20px rgba(0, 255, 163, 0.3), 0 0 60px rgba(0, 255, 163, 0.1)" }}
-          >
-            {isStarting ? "Starting..." : "START GAME"}
-          </button>
+          {isOwner ? (
+            <button
+              onClick={handleStartGame}
+              disabled={isStarting}
+              className="px-8 py-3 bg-alpha-green text-bg-primary font-bold text-lg rounded-xl
+                         cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-all
+                         hover:brightness-110 active:scale-[0.98]"
+              style={{ boxShadow: "0 0 20px rgba(0, 255, 163, 0.3), 0 0 60px rgba(0, 255, 163, 0.1)" }}
+            >
+              {isStarting ? "Starting..." : "START GAME"}
+            </button>
+          ) : (
+            <p className="text-text-muted text-sm">
+              Waiting for lobby owner to start the game...
+            </p>
+          )}
         </div>
+      )}
+
+      {/* Bot Subscribe Dialog */}
+      {dialogBot && (
+        <BotSubscribeDialog
+          bot={dialogBot}
+          onConfirm={handleSubscribeConfirm}
+          onCancel={() => { setDialogBot(null); setDialogError(null); }}
+          isPurchasing={isSubscribing === dialogBot.strategy}
+          error={dialogError}
+        />
       )}
     </div>
   );
@@ -410,12 +542,14 @@ function PlayerCard({
   index,
   player,
   isCurrentPlayer,
+  isOwner,
   hiredBy,
   buyIn,
 }: {
   index: number;
   player: Player;
   isCurrentPlayer: boolean;
+  isOwner: boolean;
   hiredBy: string | null;
   buyIn: number;
 }) {
@@ -459,6 +593,11 @@ function PlayerCard({
           <span className="text-text-primary font-semibold text-sm truncate">
             {player.username}
           </span>
+          {isOwner && (
+            <span className="text-[10px] text-alpha-green bg-alpha-green/10 px-1.5 py-0.5 rounded font-mono-numbers">
+              OWNER
+            </span>
+          )}
           {isCurrentPlayer && (
             <span className="text-[10px] text-safety-cyan bg-safety-cyan/10 px-1.5 py-0.5 rounded font-mono-numbers">
               YOU

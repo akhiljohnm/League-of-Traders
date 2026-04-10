@@ -62,7 +62,7 @@ export default function PlayPage() {
     setError(null);
     setPhase("matchmaking");
     try {
-      const { lobby: foundLobby } = await findOrCreateLobby(buyIn, symbol);
+      const { lobby: foundLobby } = await findOrCreateLobby(buyIn, symbol, player!.id);
       console.log(`[Play] Matched to lobby: ${foundLobby.id} (${symbol})`);
 
       await joinLobby(foundLobby.id, player!.id);
@@ -95,6 +95,18 @@ export default function PlayPage() {
       setError(err instanceof Error ? err.message : "Failed to start game");
     }
   }, []);
+
+  const handleExitGame = useCallback(async () => {
+    console.log("[Play] Player exited game — returning to market select");
+    if (player) {
+      const refreshed = await getPlayerById(player.id);
+      if (refreshed) setPlayer(refreshed);
+    }
+    setLobby(null);
+    setAllPlayers([]);
+    setPayoutSummary(null);
+    setPhase("market-select");
+  }, [player]);
 
   return (
     <main className="min-h-screen bg-bg-primary">
@@ -166,6 +178,7 @@ export default function PlayPage() {
                 setPayoutSummary(summary);
                 setPhase("post-game");
               }}
+              onExitGame={handleExitGame}
             />
           </div>
         )}

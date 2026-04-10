@@ -10,6 +10,7 @@ import {
 } from "@/hooks/useGameEngine";
 import type { PayoutSummary } from "@/lib/game/payout-engine";
 import { TICK_DURATION_OPTIONS, RISE_PAYOUT, FALL_PAYOUT } from "@/lib/game/rise-fall";
+import { updatePlayerFinalBalance } from "@/lib/actions/lobby";
 import type { Player, LobbyPlayer, TradeDirection } from "@/lib/types/database";
 import type { DerivTick } from "@/lib/types/deriv";
 
@@ -24,6 +25,7 @@ interface GameViewProps {
   allPlayers: (LobbyPlayer & { player: Player })[];
   buyIn: number;
   onGameEnd: (summary: PayoutSummary) => void;
+  onExitGame: () => void;
 }
 
 export default function GameView({
@@ -33,6 +35,7 @@ export default function GameView({
   allPlayers,
   buyIn,
   onGameEnd,
+  onExitGame,
 }: GameViewProps) {
   const engine = useGameEngine({
     lobbyId,
@@ -44,6 +47,8 @@ export default function GameView({
 
   const [selectedTicks, setSelectedTicks] = useState(5);
   const [stakeInput, setStakeInput] = useState("");
+  const [showExitModal, setShowExitModal] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
 
   // Transition to post-game once payout is calculated
   const postGameCalledRef = useRef(false);
@@ -65,12 +70,24 @@ export default function GameView({
   const handleTrade = async (direction: TradeDirection) => {
     if (stake <= 0 || stake > engine.humanBalance || !engine.canTrade) return;
     await engine.placeHumanTrade(direction, stake, selectedTicks);
-    setStakeInput("");
   };
 
   const setStakePercent = (pct: number) => {
     const val = Math.floor(engine.humanBalance * pct * 100) / 100;
     setStakeInput(val > 0 ? val.toString() : "");
+  };
+
+  const handleConfirmExit = async () => {
+    setIsExiting(true);
+    try {
+      await updatePlayerFinalBalance(lobbyId, currentPlayer.id, 0);
+      console.log(`[GameView] Player ${currentPlayer.username} exited — buy-in forfeited`);
+      onExitGame();
+    } catch (err) {
+      console.error("[GameView] Failed to exit game:", err);
+      setIsExiting(false);
+      setShowExitModal(false);
+    }
   };
 
   return (
@@ -82,6 +99,7 @@ export default function GameView({
         isConnected={engine.isConnected}
         gamePhase={engine.gamePhase}
         tickCount={engine.tickCount}
+        onExitClick={() => setShowExitModal(true)}
       />
 
       {/* Disconnect Warning */}
@@ -233,6 +251,53 @@ export default function GameView({
         </div>
       </div>
 
+      {/* Exit Confirmation Modal */}
+      {showExitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/80 backdrop-blur-sm">
+          <div className="bg-bg-surface border border-border-default rounded-2xl p-8 max-w-md w-full mx-4">
+            <div className="text-center mb-6">
+              <div className="w-14 h-14 rounded-full bg-rekt-crimson/10 border border-rekt-crimson/20 flex items-center justify-center mx-auto mb-4">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-rekt-crimson">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <h3 className="text-text-primary font-bold text-lg mb-2">
+                Exit Game?
+              </h3>
+              <p className="text-rekt-crimson font-semibold text-sm mb-2">
+                Exiting will forfeit your buy-in of{" "}
+                <span className="font-mono-numbers">${buyIn.toLocaleString()}</span>
+              </p>
+              <p className="text-text-muted text-sm leading-relaxed">
+                Your balance will not be refunded. Any open trades will be abandoned.
+                The game will continue for the remaining players.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowExitModal(false)}
+                disabled={isExiting}
+                className="flex-1 py-3 bg-safety-cyan/10 border border-safety-cyan/30 text-safety-cyan
+                           font-bold rounded-xl cursor-pointer hover:bg-safety-cyan/20 transition-colors
+                           disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Continue Playing
+              </button>
+              <button
+                onClick={handleConfirmExit}
+                disabled={isExiting}
+                className="flex-1 py-3 bg-rekt-crimson text-white font-bold rounded-xl cursor-pointer
+                           hover:brightness-110 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isExiting ? "Exiting..." : "Yes, Exit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Game ending state */}
       {engine.gamePhase === "ending" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/80 backdrop-blur-sm">
@@ -259,12 +324,14 @@ function GameHeader({
   isConnected,
   gamePhase,
   tickCount,
+  onExitClick,
 }: {
   timeRemainingMs: number;
   symbol: string;
   isConnected: boolean;
   gamePhase: GamePhase;
   tickCount: number;
+  onExitClick: () => void;
 }) {
   const minutes = Math.floor(timeRemainingMs / 60000);
   const seconds = Math.floor((timeRemainingMs % 60000) / 1000);
@@ -297,7 +364,7 @@ function GameHeader({
           )}
         </div>
 
-        {/* Market + connection */}
+        {/* Market + connection + exit */}
         <div className="flex items-center gap-4">
           <span className="font-mono-numbers text-text-secondary text-sm">
             {symbol}
@@ -315,6 +382,16 @@ function GameHeader({
               {isConnected ? "LIVE" : "OFFLINE"}
             </span>
           </div>
+          {gamePhase === "active" && (
+            <button
+              onClick={onExitClick}
+              className="px-3 py-1.5 bg-rekt-crimson/10 border border-rekt-crimson/30 rounded-lg
+                         text-rekt-crimson text-xs font-bold uppercase tracking-wider
+                         hover:bg-rekt-crimson/20 hover:border-rekt-crimson/50 transition-colors cursor-pointer"
+            >
+              EXIT
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -351,8 +428,12 @@ function PriceDisplay({
         ? "glow-red"
         : "";
 
-  const arrow =
-    direction === "up" ? "\u25B2" : direction === "down" ? "\u25BC" : "";
+  const borderAccent =
+    direction === "up"
+      ? "border-alpha-green/30"
+      : direction === "down"
+        ? "border-rekt-crimson/30"
+        : "border-border-default";
 
   if (!currentTick) {
     return (
@@ -365,12 +446,19 @@ function PriceDisplay({
   }
 
   return (
-    <div className="bg-bg-surface border border-border-default rounded-xl p-6 text-center">
-      <div
-        className={`font-mono-numbers text-5xl font-bold ${colorClass} ${glowClass} transition-colors duration-150`}
-      >
-        {arrow && <span className="text-3xl mr-2">{arrow}</span>}
-        {currentTick.quote.toFixed(currentTick.pip_size)}
+    <div className={`bg-bg-surface border ${borderAccent} rounded-xl p-6 text-center transition-colors duration-200`}>
+      <div className="flex items-center justify-center">
+        {/* Fixed-width arrow container — prevents layout shift */}
+        <span
+          className={`inline-block w-10 text-3xl font-bold text-right mr-1 transition-colors duration-150 ${colorClass}`}
+        >
+          {direction === "up" ? "\u25B2" : direction === "down" ? "\u25BC" : ""}
+        </span>
+        <span
+          className={`font-mono-numbers text-5xl font-bold ${colorClass} ${glowClass} transition-colors duration-150`}
+        >
+          {currentTick.quote.toFixed(currentTick.pip_size)}
+        </span>
       </div>
       <div className="flex items-center justify-center gap-6 mt-3 text-xs text-text-muted font-mono-numbers">
         <span>ASK {currentTick.ask.toFixed(currentTick.pip_size)}</span>
@@ -428,6 +516,9 @@ function PlayerStatsBar({
   );
 }
 
+const ROW_HEIGHT = 56; // px per leaderboard row (p-3 = 12px*2 + ~32px content)
+const ROW_GAP = 8; // space-y-2 = 8px
+
 function TeamLeaderboard({
   players,
   buyIn,
@@ -435,6 +526,62 @@ function TeamLeaderboard({
   players: PlayerBalance[];
   buyIn: number;
 }) {
+  // Track previous ranks to detect movement
+  const prevRanksRef = useRef<Map<string, number>>(new Map());
+  const [rankChanges, setRankChanges] = useState<Map<string, "up" | "down">>(new Map());
+  const animationTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // Build current rank map and detect changes
+  useEffect(() => {
+    const prevRanks = prevRanksRef.current;
+    const newChanges = new Map<string, "up" | "down">();
+
+    players.forEach((p, i) => {
+      const prevRank = prevRanks.get(p.playerId);
+      if (prevRank !== undefined && prevRank !== i) {
+        const direction = i < prevRank ? "up" : "down";
+        newChanges.set(p.playerId, direction);
+
+        // Clear any existing timer for this player
+        const existingTimer = animationTimersRef.current.get(p.playerId);
+        if (existingTimer) clearTimeout(existingTimer);
+
+        // Auto-clear the indicator after 2s
+        const timer = setTimeout(() => {
+          setRankChanges((prev) => {
+            const next = new Map(prev);
+            next.delete(p.playerId);
+            return next;
+          });
+          animationTimersRef.current.delete(p.playerId);
+        }, 2000);
+        animationTimersRef.current.set(p.playerId, timer);
+      }
+    });
+
+    if (newChanges.size > 0) {
+      setRankChanges((prev) => {
+        const merged = new Map(prev);
+        newChanges.forEach((v, k) => merged.set(k, v));
+        return merged;
+      });
+    }
+
+    // Save current ranks for next comparison
+    const nextRanks = new Map<string, number>();
+    players.forEach((p, i) => nextRanks.set(p.playerId, i));
+    prevRanksRef.current = nextRanks;
+  }, [players]);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      animationTimersRef.current.forEach((timer) => clearTimeout(timer));
+    };
+  }, []);
+
+  const containerHeight = players.length * (ROW_HEIGHT + ROW_GAP) - ROW_GAP;
+
   return (
     <div className="bg-bg-surface border border-border-default rounded-xl p-4 sticky top-20">
       <h3 className="text-text-primary font-bold text-sm mb-3 flex items-center gap-2">
@@ -443,35 +590,70 @@ function TeamLeaderboard({
         </svg>
         TEAM LEADERBOARD
       </h3>
-      <div className="space-y-2">
+      <div className="relative" style={{ height: containerHeight }}>
         {players.map((p, i) => {
           const pnlColor = p.pnl >= 0 ? "text-alpha-green" : "text-rekt-crimson";
           const pnlSign = p.pnl >= 0 ? "+" : "";
+          const isLeader = i === 0;
+          const change = rankChanges.get(p.playerId);
+
+          // Flash class based on rank movement
+          const flashClass = change === "up"
+            ? "animate-rank-up"
+            : change === "down"
+              ? "animate-rank-down"
+              : "";
 
           return (
             <div
               key={p.playerId}
-              className={`flex items-center gap-3 rounded-lg p-3 transition-colors ${
-                p.isCurrentPlayer
-                  ? "bg-safety-cyan/5 border border-safety-cyan/20"
-                  : "bg-bg-primary border border-transparent"
+              className={`absolute left-0 right-0 flex items-center gap-3 rounded-lg p-3 border ${flashClass} ${
+                isLeader
+                  ? "leaderboard-leader bg-yellow-400/5"
+                  : p.isCurrentPlayer
+                    ? "bg-safety-cyan/5 border-safety-cyan/20"
+                    : "bg-bg-primary border-transparent"
               }`}
+              style={{
+                top: i * (ROW_HEIGHT + ROW_GAP),
+                height: ROW_HEIGHT,
+                transition: "top 400ms cubic-bezier(0.22, 1, 0.36, 1)",
+              }}
             >
-              {/* Rank */}
-              <span
-                className={`font-mono-numbers text-sm font-bold w-5 text-center ${
-                  i === 0 ? "text-safety-cyan" : "text-text-muted"
-                }`}
-              >
-                {i + 1}
-              </span>
+              {/* Rank + Crown */}
+              <div className="w-5 text-center shrink-0 relative">
+                {isLeader ? (
+                  <div className="flex flex-col items-center">
+                    <div className="animate-crown-bounce mb-[-2px]">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path
+                          d="M2 17L5 7L9 12L12 4L15 12L19 7L22 17H2Z"
+                          fill="rgba(255, 215, 0, 0.3)"
+                          stroke="rgba(255, 215, 0, 0.9)"
+                          strokeWidth="1.5"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </div>
+                    <span className="font-mono-numbers text-[10px] font-bold text-yellow-400">
+                      1
+                    </span>
+                  </div>
+                ) : (
+                  <span className="font-mono-numbers text-sm font-bold text-text-muted">
+                    {i + 1}
+                  </span>
+                )}
+              </div>
 
               {/* Avatar */}
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                   p.isBot
                     ? "bg-bg-elevated border border-border-hover text-safety-cyan"
-                    : "bg-safety-cyan/10 border border-safety-cyan/20 text-safety-cyan"
+                    : isLeader
+                      ? "bg-yellow-400/10 border border-yellow-400/30 text-yellow-400"
+                      : "bg-safety-cyan/10 border border-safety-cyan/20 text-safety-cyan"
                 }`}
               >
                 {p.isBot ? (
@@ -488,12 +670,24 @@ function TeamLeaderboard({
               {/* Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1">
-                  <span className="text-text-primary text-xs font-semibold truncate">
+                  <span className={`text-xs font-semibold truncate ${
+                    isLeader ? "text-yellow-400" : "text-text-primary"
+                  }`}>
                     {p.username}
                   </span>
                   {p.isCurrentPlayer && (
                     <span className="text-[8px] text-safety-cyan bg-safety-cyan/10 px-1 rounded">
                       YOU
+                    </span>
+                  )}
+                  {/* Rank change indicator */}
+                  {change && (
+                    <span
+                      className={`animate-rank-indicator text-[10px] font-bold ${
+                        change === "up" ? "text-alpha-green" : "text-rekt-crimson"
+                      }`}
+                    >
+                      {change === "up" ? "\u25B2" : "\u25BC"}
                     </span>
                   )}
                 </div>
@@ -504,7 +698,9 @@ function TeamLeaderboard({
 
               {/* Balance + PnL */}
               <div className="text-right shrink-0">
-                <span className="font-mono-numbers text-xs font-bold text-text-primary block">
+                <span className={`font-mono-numbers text-xs font-bold block ${
+                  isLeader ? "text-yellow-400" : "text-text-primary"
+                }`}>
                   ${p.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 <span className={`font-mono-numbers text-[10px] ${pnlColor}`}>

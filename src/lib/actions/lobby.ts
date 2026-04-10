@@ -24,7 +24,8 @@ function randomBotName(strategy: BotStrategy): string {
  */
 export async function findOrCreateLobby(
   buyIn: number,
-  symbol: string
+  symbol: string,
+  playerId: string
 ): Promise<{
   lobby: Lobby;
   playerCount: number;
@@ -55,10 +56,10 @@ export async function findOrCreateLobby(
     }
   }
 
-  // No available lobby — create one
+  // No available lobby — create one (creator becomes owner)
   const { data: newLobby, error } = await supabase
     .from("lobbies")
-    .insert({ status: "waiting", buy_in: buyIn, symbol })
+    .insert({ status: "waiting", buy_in: buyIn, symbol, owner_id: playerId })
     .select()
     .single();
 
@@ -100,9 +101,9 @@ export async function joinLobby(
     throw new Error("Lobby is full");
   }
 
-  // Get lobby buy-in and player balance
+  // Get lobby details and player balance
   const [lobbyRes, playerRes] = await Promise.all([
-    supabase.from("lobbies").select("buy_in").eq("id", lobbyId).single(),
+    supabase.from("lobbies").select("buy_in, owner_id").eq("id", lobbyId).single(),
     supabase
       .from("players")
       .select("game_token_balance")
@@ -112,6 +113,15 @@ export async function joinLobby(
 
   const buyIn = lobbyRes.data?.buy_in ?? 0;
   const balance = playerRes.data?.game_token_balance ?? 0;
+
+  // If lobby has no owner yet, this player becomes the owner
+  if (!lobbyRes.data?.owner_id) {
+    await supabase
+      .from("lobbies")
+      .update({ owner_id: playerId })
+      .eq("id", lobbyId);
+    console.log(`[Lobby] Player ${playerId} is now the owner of lobby ${lobbyId}`);
+  }
 
   if (balance < buyIn) {
     throw new Error(
@@ -162,12 +172,22 @@ export async function getLobbyPlayers(
 
 /**
  * Hire a mercenary bot into the lobby. Bot buy-in matches the lobby's buy-in.
+ * Requires an active subscription ($200/month) for the bot strategy.
  */
 export async function hireMercenaryBot(
   lobbyId: string,
   hiredByPlayerId: string,
   strategy: BotStrategy
 ): Promise<{ bot: Player; lobbyPlayer: LobbyPlayer }> {
+  // Check subscription is active (triggers lazy renewal if expired)
+  const { hasActiveSubscription } = await import("./subscription");
+  const isSubscribed = await hasActiveSubscription(hiredByPlayerId, strategy);
+  if (!isSubscribed) {
+    throw new Error(
+      "You need an active subscription to hire this bot. Subscribe for $200/month."
+    );
+  }
+
   // Check lobby isn't full
   const { count } = await supabase
     .from("lobby_players")
@@ -250,7 +270,18 @@ export async function hireMercenaryBot(
  * Start the game for a lobby. Transitions to `in_progress` and sets `started_at`.
  * Accepts lobbies in either `waiting` or `locked` status.
  */
-export async function startLobby(lobbyId: string): Promise<Lobby> {
+export async function startLobby(lobbyId: string, playerId: string): Promise<Lobby> {
+  // Verify the caller is the lobby owner
+  const { data: lobbyCheck } = await supabase
+    .from("lobbies")
+    .select("owner_id")
+    .eq("id", lobbyId)
+    .single();
+
+  if (lobbyCheck?.owner_id !== playerId) {
+    throw new Error("Only the lobby owner can start the game");
+  }
+
   const { count } = await supabase
     .from("lobby_players")
     .select("*", { count: "exact", head: true })
