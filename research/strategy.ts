@@ -32,7 +32,7 @@ const PARAMS = {
   momentumBias: 0.65,       // Probability of following micro-momentum
 
   // Trade Management
-  stakePercent: 0.18,       // Fraction of balance per trade
+  stakePercent: 0.19,       // Fraction of balance per trade
   maxStakePercent: 0.25,    // Hard cap on stake as fraction of balance
   cooldownTicks: 5,         // Min ticks between signal trades
   minTicks: 15,             // Warmup period before first trade
