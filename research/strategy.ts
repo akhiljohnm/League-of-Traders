@@ -28,9 +28,6 @@ const PARAMS = {
   bbWindow: 20,             // Rolling window for mean + stddev
   bbMultiplier: 1.8,        // Stddev multiplier for band width
 
-  // Momentum
-  momentumBias: 0.65,       // Probability of following micro-momentum
-
   // Trade Management
   stakePercent: 0.19,       // Fraction of balance per trade
   maxStakePercent: 0.25,    // Hard cap on stake as fraction of balance
