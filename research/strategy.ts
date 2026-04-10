@@ -26,7 +26,9 @@ const PARAMS = {
 
   // Bollinger Bands (Mean Reversion)
   bbWindow: 20,             // Rolling window for mean + stddev
-  bbMultiplier: 1.87,       // Stddev multiplier for band width
+  bbMultiplier: 1.80,       // Stddev multiplier for low-vol markets
+  bbMultiplierHigh: 1.87,   // Stddev multiplier for high-vol markets
+  bbVolThreshold: 0.0003,   // RelVol above this = use high multiplier
 
   // Trade Management
   stakePercent: 0.19,       // Fraction of balance per trade
@@ -154,8 +156,10 @@ export function createStrategy(): StrategyInstance {
         const stdDev = getStdDev(mean);
 
         if (stdDev > mean * PARAMS.flatMarketThreshold) {
-          const upperBand = mean + PARAMS.bbMultiplier * stdDev;
-          const lowerBand = mean - PARAMS.bbMultiplier * stdDev;
+          const relVol = stdDev / mean;
+          const mult = relVol > PARAMS.bbVolThreshold ? PARAMS.bbMultiplierHigh : PARAMS.bbMultiplier;
+          const upperBand = mean + mult * stdDev;
+          const lowerBand = mean - mult * stdDev;
 
           if (price > upperBand) {
             reversionSignal = -1.0; // Overbought → expect DOWN
