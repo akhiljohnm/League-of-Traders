@@ -37,7 +37,7 @@ const PARAMS = {
   minTicks: 15,             // Warmup period before first trade
 
   // Game-Aware Sizing
-  rescueMultiplier: 0.8,    // Conservative when losing (protect capital)
+  rescueMultiplier: 1.0,    // Neutral when losing
   alphaMultiplier: 1.5,     // Aggressive when winning (ride the streak)
 
   // Signal Weights (how to blend indicators)
