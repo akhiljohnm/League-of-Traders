@@ -47,10 +47,6 @@ const PARAMS = {
   flatMarketThreshold: 0.0001, // Below this relative stddev, skip trading
 };
 
-// Game constants (match the actual game)
-const GAME_TOTAL_TICKS = 300;
-const MIN_TRADES_QUOTA = 5;
-
 // ============================================================
 // STRATEGY IMPLEMENTATION
 // ============================================================
@@ -71,7 +67,6 @@ export function createStrategy(): StrategyInstance {
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
   let totalTicks = 0;
-  let tradesPlaced = 0;
 
   // ---- Bollinger Band helpers ----
   function getMean(): number {
@@ -189,7 +184,6 @@ export function createStrategy(): StrategyInstance {
       if (stake < minStake) return null;
 
       ticksSinceLastTrade = 0;
-      tradesPlaced++;
       return { direction, stake };
     },
 
@@ -202,7 +196,6 @@ export function createStrategy(): StrategyInstance {
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
       totalTicks = 0;
-      tradesPlaced = 0;
     },
   };
 }
