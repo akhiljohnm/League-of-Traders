@@ -36,7 +36,7 @@ const PARAMS = {
   lateGameMultiplier: 4.00, // Stake boost in final 60 ticks when winning
   lateGameTick: 225,        // Tick threshold for late-game boost
   cooldownTicks: 5,         // Min ticks between signal trades
-  minTicks: 10,             // Warmup period before first trade
+  minTicks: 8,              // Warmup period before first trade
 
   // Signal Weights (how to blend indicators)
   trendWeight: 0.5,         // Weight for EMA crossover signal
