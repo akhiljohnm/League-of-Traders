@@ -20,22 +20,23 @@ import type { Tick, TradeDecision, StrategyInstance } from "./types";
 // ============================================================
 
 const PARAMS = {
-  // EMA Crossover (Trend Following)
+  // EMA (Trend)
   shortWindow: 8,            // Short EMA period
   longWindow: 21,            // Long EMA period
 
-  // Bollinger Bands (Mean Reversion)
-  bbWindow: 20,              // Rolling window for mean + stddev
-  bbMultiplier: 3.0,         // Stddev multiplier for BB bands
+  // Price-to-EMA momentum threshold
+  // Signal fires when price deviates from shortEMA by this fraction AND trend aligned
+  priceEmaThresh: 0.0003,    // 0.03% deviation from shortEMA triggers entry
+
+  // Bollinger Bands (Mean Reversion — effectively disabled at 3.0)
+  bbWindow: 20,
+  bbMultiplier: 3.0,
 
   // Trade Management
   contractDuration: 4,       // Ticks per contract
   stakePercent: 0.14,        // Fraction of balance per trade
-  cooldownTicks: 3,          // Min ticks between signal trades (lower to get more trades)
+  cooldownTicks: 3,          // Min ticks between signal trades
   minTicks: 15,              // Warmup period before first trade
-
-  // Higher threshold = only very strong signals
-  compositeThreshold: 0.6,   // Very strict: requires EMA + momentum alignment
 };
 
 // ============================================================
@@ -51,8 +52,6 @@ function updateEMA(current: number | null, price: number, period: number): numbe
 export function createStrategy(): StrategyInstance {
   let shortEMA: number | null = null;
   let longEMA: number | null = null;
-  let prevShortEMA: number | null = null;
-  let prevLongEMA: number | null = null;
   let priceHistory: number[] = [];
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
@@ -70,7 +69,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 priceEmaThresh0.0003 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -82,8 +81,6 @@ export function createStrategy(): StrategyInstance {
         priceHistory = priceHistory.slice(-PARAMS.bbWindow * 2);
       }
 
-      prevShortEMA = shortEMA;
-      prevLongEMA = longEMA;
       shortEMA = updateEMA(shortEMA, price, PARAMS.shortWindow);
       longEMA = updateEMA(longEMA, price, PARAMS.longWindow);
 
@@ -97,20 +94,24 @@ export function createStrategy(): StrategyInstance {
 
       if (ticksSinceLastTrade < PARAMS.cooldownTicks) return null;
 
+      if (shortEMA === null || longEMA === null) return null;
+
       // ---- Signals ----
+
+      // 1. Trend: short EMA above/below long EMA (continuous, not crossover-based)
+      const emaTrendRatio = (shortEMA - longEMA) / longEMA;  // positive = uptrend
       let trendSignal = 0;
+      if (emaTrendRatio > 0.0001) trendSignal = 1.0;
+      else if (emaTrendRatio < -0.0001) trendSignal = -1.0;
+
+      // 2. Price-to-EMA deviation: price above/below short EMA by priceEmaThresh
+      const priceDeviation = (price - shortEMA) / shortEMA;
+      let deviationSignal = 0;
+      if (priceDeviation > PARAMS.priceEmaThresh) deviationSignal = 1.0;
+      else if (priceDeviation < -PARAMS.priceEmaThresh) deviationSignal = -1.0;
+
+      // 3. Bollinger Bands (disabled at 3.0)
       let reversionSignal = 0;
-      let momentumSignal = 0;
-
-      // 1. EMA Crossover
-      if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
-        const prevDiff = prevShortEMA - prevLongEMA;
-        const currDiff = shortEMA - longEMA;
-        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
-        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
-      }
-
-      // 2. Bollinger Bands
       if (priceHistory.length >= PARAMS.bbWindow) {
         const mean = getMean();
         const stdDev = getStdDev(mean);
@@ -122,15 +123,20 @@ export function createStrategy(): StrategyInstance {
         }
       }
 
-      // 3. Micro-Momentum
+      // 4. Micro-Momentum
+      let momentumSignal = 0;
       if (prevPrice !== null && price !== prevPrice) {
         momentumSignal = price > prevPrice ? 1.0 : -1.0;
       }
 
-      // Blend: 0.5 trend + 0.3 reversion + 0.2 momentum
-      const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
+      // Require trend and price-deviation to agree (both positive or both negative)
+      // This fires when: price is in uptrend AND price is above short EMA (continuation)
+      if (trendSignal === 0 || deviationSignal === 0 || trendSignal !== deviationSignal) return null;
 
-      if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
+      // Use momentum as a secondary confirmation
+      const composite = trendSignal * 0.7 + momentumSignal * 0.3 + reversionSignal * 0.0;
+
+      if (Math.abs(composite) < 0.4) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
       const stakeAmt = Math.round(balance * PARAMS.stakePercent * 100) / 100;
@@ -143,8 +149,6 @@ export function createStrategy(): StrategyInstance {
     reset() {
       shortEMA = null;
       longEMA = null;
-      prevShortEMA = null;
-      prevLongEMA = null;
       priceHistory = [];
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
