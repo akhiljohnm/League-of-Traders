@@ -60,7 +60,8 @@ export function createStrategy(): StrategyInstance {
   let priceHistory: number[] = [];
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
-  let ticksSinceAnyCrossover = PARAMS.minTicksSinceCrossover; // starts ready
+  let ticksSinceLastCrossover = PARAMS.minTicksSinceCrossover; // starts ready
+  let lastCrossoverDir = 0; // 1=bullish, -1=bearish
   let totalTicks = 0;
 
   function getMean(): number {
@@ -75,13 +76,13 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 xoRecency4 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 antiWhipsaw4 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
       totalTicks++;
       ticksSinceLastTrade++;
-      ticksSinceAnyCrossover++;
+      ticksSinceLastCrossover++;
 
       priceHistory.push(price);
       if (priceHistory.length > PARAMS.bbWindow * 2) {
@@ -108,19 +109,25 @@ export function createStrategy(): StrategyInstance {
       let reversionSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover — only fire if previous crossover was >= minTicksSinceCrossover ago
+      // 1. EMA Crossover — anti-whipsaw filter
+      // Skip a crossover only if the OPPOSITE direction crossover was < minTicksSinceCrossover ago
+      // (this targets whipsaws: UP then DOWN in < 4 ticks = fake breakout)
+      // Same-direction crossovers within 4 ticks are still allowed (continuation signal)
       if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
-        const isCrossover = (prevDiff <= 0 && currDiff > 0) || (prevDiff >= 0 && currDiff < 0);
-        if (isCrossover) {
-          // Only trade this crossover if the PREVIOUS one was far enough ago
-          if (ticksSinceAnyCrossover >= PARAMS.minTicksSinceCrossover) {
-            if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
-            else trendSignal = -1.0;
-          }
-          // Always reset the crossover timer, regardless of whether we trade
-          ticksSinceAnyCrossover = 0;
+        if (prevDiff <= 0 && currDiff > 0) {
+          // Bullish crossover: skip only if last crossover was bearish within minTicksSinceCrossover
+          const isWhipsaw = lastCrossoverDir === -1 && ticksSinceLastCrossover < PARAMS.minTicksSinceCrossover;
+          if (!isWhipsaw) trendSignal = 1.0;
+          ticksSinceLastCrossover = 0;
+          lastCrossoverDir = 1;
+        } else if (prevDiff >= 0 && currDiff < 0) {
+          // Bearish crossover: skip only if last crossover was bullish within minTicksSinceCrossover
+          const isWhipsaw = lastCrossoverDir === 1 && ticksSinceLastCrossover < PARAMS.minTicksSinceCrossover;
+          if (!isWhipsaw) trendSignal = -1.0;
+          ticksSinceLastCrossover = 0;
+          lastCrossoverDir = -1;
         }
       }
 
@@ -162,7 +169,8 @@ export function createStrategy(): StrategyInstance {
       priceHistory = [];
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
-      ticksSinceAnyCrossover = PARAMS.minTicksSinceCrossover;
+      ticksSinceLastCrossover = PARAMS.minTicksSinceCrossover;
+      lastCrossoverDir = 0;
       totalTicks = 0;
     },
   };
