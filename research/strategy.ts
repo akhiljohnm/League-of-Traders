@@ -36,7 +36,7 @@ const PARAMS = {
 
   // Crossover recency filter: don't trade if the SAME crossover just happened <4 ticks ago
   // This filters whipsaw re-crossovers while keeping cooldown=3 for trade spacing
-  minTicksSinceCrossover: 4, // Must wait this long after any crossover to trade
+  minTicksSinceCrossover: 3, // Must wait this long after any crossover to trade
 
   // Higher threshold = only very strong signals
   compositeThreshold: 0.6,   // Requires EMA + momentum alignment
@@ -75,7 +75,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 xoRecency4 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 xoRecency3 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
