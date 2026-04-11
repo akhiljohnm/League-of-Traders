@@ -118,7 +118,7 @@ export function createStrategy(): StrategyInstance {
 
       // ---- Cooldown check (adaptive: longer in losing regime) ----
       const activeCooldown = (balanceHistory.length >= 15 && (balance - balanceHistory[0]) / balanceHistory[0] < -0.03)
-        ? PARAMS.cooldownTicks + 3
+        ? PARAMS.cooldownTicks + 4
         : PARAMS.cooldownTicks;
       if (ticksSinceLastTrade < activeCooldown) return null;
 
