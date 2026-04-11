@@ -140,12 +140,13 @@ export function createStrategy(): StrategyInstance {
       }
 
       // 2. Bollinger Bands (Mean Reversion)
+      let relVol = 0;
       if (priceHistory.length >= PARAMS.bbWindow) {
         const mean = getMean();
         const stdDev = getStdDev(mean);
+        relVol = stdDev / mean;
 
         if (stdDev > mean * PARAMS.flatMarketThreshold) {
-          const relVol = stdDev / mean;
           const mult = relVol > PARAMS.bbVolThreshold ? PARAMS.bbMultiplierHigh : PARAMS.bbMultiplier;
           const upperBand = mean + mult * stdDev;
           const lowerBand = mean - mult * stdDev;
@@ -182,11 +183,13 @@ export function createStrategy(): StrategyInstance {
       if (Math.abs(composite) < signalThreshold) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
-      // Drawdown protection: two-tier. Deep loss (<75%) → 20% stake; mild loss (<95%) → 60% stake
+      // Drawdown protection: two-tier. Deep loss (<75%) → 10% stake; mild loss (<95%) → 50% stake
       // Late game (balance > buyIn) is immune since buyIn > buyIn*0.95 always
       const drawdownFactor = balance < buyIn * 0.75 ? 0.10 : balance < buyIn * 0.95 ? 0.50 : 1.0;
+      // High-vol markets (1HZ100V) get 75% stake to reduce noise losses
+      const highVolFactor = relVol > PARAMS.bbVolThreshold ? 0.75 : 1.0;
       const stakeAmt = Math.round(
-        balance * (isLateGame ? PARAMS.stakePercent * PARAMS.lateGameMultiplier : PARAMS.stakePercent * drawdownFactor) * 100
+        balance * (isLateGame ? PARAMS.stakePercent * PARAMS.lateGameMultiplier : PARAMS.stakePercent * drawdownFactor * highVolFactor) * 100
       ) / 100;
       if (stakeAmt < minStake) return null;
 
