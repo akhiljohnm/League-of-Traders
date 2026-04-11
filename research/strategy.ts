@@ -174,7 +174,7 @@ export function createStrategy(): StrategyInstance {
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
       // Soft floor: emergency brake at <34% balance to prevent total bankruptcy
-      const bankruptcyFactor = balance < buyIn * 0.40 ? 0.10 : 1.0;
+      const bankruptcyFactor = balance < buyIn * 0.45 ? 0.10 : 1.0;
       // High-vol markets (1HZ100V) get 75% stake to reduce noise losses
       const highVolFactor = relVol > PARAMS.bbVolThreshold ? 0.75 : 1.0;
       // Late game: all-in (0.45×2.25=1.0125 always clips to 100% balance)
