@@ -24,18 +24,20 @@ const PARAMS = {
   shortWindow: 8,            // Short EMA period
   longWindow: 21,            // Long EMA period
 
-  // Bollinger Bands (Mean Reversion)
+  // Bollinger Bands (with EMA trend gate)
   bbWindow: 20,              // Rolling window for mean + stddev
-  bbMultiplier: 3.0,         // Stddev multiplier for BB bands
+  bbMultiplier: 2.0,         // 2.0 stddev — BB fires more often than 3.0
+  // BB reversion only fires when it agrees with EMA trend direction
+  // (no counter-trend BB trades)
 
   // Trade Management
   contractDuration: 4,       // Ticks per contract
   stakePercent: 0.14,        // Fraction of balance per trade
-  cooldownTicks: 3,          // Min ticks between signal trades (lower to get more trades)
+  cooldownTicks: 3,          // Min ticks between signal trades
   minTicks: 15,              // Warmup period before first trade
 
   // Higher threshold = only very strong signals
-  compositeThreshold: 0.6,   // Very strict: requires EMA + momentum alignment
+  compositeThreshold: 0.6,   // Requires EMA + momentum alignment
 };
 
 // ============================================================
@@ -70,7 +72,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB2.0 trendGated thresh0.6 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -110,19 +112,26 @@ export function createStrategy(): StrategyInstance {
         else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
       }
 
-      // 2. Bollinger Bands
+      // 2. EMA trend direction (for gating BB)
+      const emaDirection = (shortEMA !== null && longEMA !== null)
+        ? (shortEMA > longEMA ? 1 : shortEMA < longEMA ? -1 : 0)
+        : 0;
+
+      // 3. Bollinger Bands — ONLY in direction of EMA trend
+      // This turns BB reversion into "trend pullback" trades
       if (priceHistory.length >= PARAMS.bbWindow) {
         const mean = getMean();
         const stdDev = getStdDev(mean);
         if (stdDev > 0) {
           const upper = mean + PARAMS.bbMultiplier * stdDev;
           const lower = mean - PARAMS.bbMultiplier * stdDev;
-          if (price > upper) reversionSignal = -1.0;
-          else if (price < lower) reversionSignal = 1.0;
+          // Only take BB signals that align with EMA trend direction
+          if (price < lower && emaDirection > 0) reversionSignal = 1.0;  // oversold in uptrend
+          else if (price > upper && emaDirection < 0) reversionSignal = -1.0;  // overbought in downtrend
         }
       }
 
-      // 3. Micro-Momentum
+      // 4. Micro-Momentum
       if (prevPrice !== null && price !== prevPrice) {
         momentumSignal = price > prevPrice ? 1.0 : -1.0;
       }
