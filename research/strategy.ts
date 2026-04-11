@@ -39,7 +39,6 @@ const PARAMS = {
 
   // Regime Detection
   flatMarketThreshold: 0.00030, // Below this relative stddev, skip trading
-  lateGameThreshold: 0.70,  // Higher quality filter for all-in late game trades
 };
 
 // ============================================================
@@ -169,7 +168,8 @@ export function createStrategy(): StrategyInstance {
         const recentTrend = (balance - balanceHistory[0]) / balanceHistory[0];
         if (recentTrend > 0.05) regularThreshold = 0.20;       // winning regime → more trades
       }
-      const signalThreshold = isLateGame ? PARAMS.lateGameThreshold : regularThreshold;
+      // Late game requires strong signal: trend+momentum (0.70) or better
+      const signalThreshold = isLateGame ? 0.70 : regularThreshold;
       if (Math.abs(composite) < signalThreshold) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
