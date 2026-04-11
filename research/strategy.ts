@@ -38,7 +38,7 @@ const PARAMS = {
   minTicks: 8,              // Warmup period before first trade
 
   // Regime Detection
-  flatMarketThreshold: 0.00030, // Below this relative stddev, skip trading
+  flatMarketThreshold: 0.00025, // Below this relative stddev, skip trading
 };
 
 // ============================================================
