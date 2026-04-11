@@ -183,8 +183,7 @@ export function createStrategy(): StrategyInstance {
       ) / 100;
       if (stakeAmt < minStake) return null;
 
-      // Use shorter duration in high-vol markets (mean reversion resolves faster)
-      const tradeDuration = relVol > PARAMS.bbVolThreshold ? 3 : PARAMS.contractDuration;
+      const tradeDuration = PARAMS.contractDuration;
       ticksSinceLastTrade = 0;
       return { direction, stake: stakeAmt, duration: tradeDuration };
     },
