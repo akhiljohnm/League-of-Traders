@@ -29,7 +29,7 @@ const PARAMS = {
   bbMultiplier: 3.0,         // Stddev multiplier for BB bands
 
   // Trade Management
-  contractDuration: 4,       // Ticks per contract
+  contractDuration: 5,       // Ticks per contract
   stakePercent: 0.14,        // Fraction of balance per trade
   cooldownTicks: 3,          // Min ticks between signal trades (lower to get more trades)
   minTicks: 15,              // Warmup period before first trade
@@ -70,7 +70,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur5",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
