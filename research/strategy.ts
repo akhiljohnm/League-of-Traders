@@ -172,12 +172,11 @@ export function createStrategy(): StrategyInstance {
 
       // Only trade if composite signal is strong enough
       const isLateGame = totalTicks >= PARAMS.lateGameTick && balance > buyIn;
-      // Adaptive threshold: lower when winning (more signals), raise when losing (fewer)
+      // Adaptive threshold: lower when winning
       let regularThreshold = 0.25;
       if (balanceHistory.length >= 15) {
         const recentTrend = (balance - balanceHistory[0]) / balanceHistory[0];
         if (recentTrend > 0.05) regularThreshold = 0.20;       // winning regime → more trades
-        else if (recentTrend < -0.03) regularThreshold = 0.35; // losing regime → fewer trades
       }
       const signalThreshold = isLateGame ? PARAMS.lateGameThreshold : regularThreshold;
       if (Math.abs(composite) < signalThreshold) return null;
