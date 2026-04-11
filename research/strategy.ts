@@ -110,11 +110,8 @@ export function createStrategy(): StrategyInstance {
       if (balance < buyIn * 0.10) return null;
       if (balance < minStake * 2) return null;
 
-      // ---- Cooldown check (adaptive: longer in losing regime) ----
-      const activeCooldown = (balanceHistory.length >= 15 && (balance - balanceHistory[0]) / balanceHistory[0] < -0.03)
-        ? PARAMS.cooldownTicks + 4
-        : PARAMS.cooldownTicks;
-      if (ticksSinceLastTrade < activeCooldown) return null;
+      // ---- Cooldown check ----
+      if (ticksSinceLastTrade < PARAMS.cooldownTicks) return null;
 
       // ---- Compute signals ----
       let trendSignal = 0;  // -1 to +1
