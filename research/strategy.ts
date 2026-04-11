@@ -182,8 +182,8 @@ export function createStrategy(): StrategyInstance {
       if (Math.abs(composite) < signalThreshold) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
-      // Soft floor: emergency brake at <25% balance to prevent total bankruptcy
-      const bankruptcyFactor = balance < buyIn * 0.25 ? 0.10 : 1.0;
+      // Soft floor: emergency brake at <35% balance to prevent total bankruptcy
+      const bankruptcyFactor = balance < buyIn * 0.35 ? 0.10 : 1.0;
       // High-vol markets (1HZ100V) get 75% stake to reduce noise losses
       const highVolFactor = relVol > PARAMS.bbVolThreshold ? 0.75 : 1.0;
       const stakeAmt = Math.round(
