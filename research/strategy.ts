@@ -28,6 +28,9 @@ const PARAMS = {
   bbWindow: 20,              // Rolling window for mean + stddev
   bbMultiplier: 3.0,         // Stddev multiplier for BB bands
 
+  // RSI
+  rsiWindow: 14,             // RSI period
+
   // Trade Management
   contractDuration: 4,       // Ticks per contract
   stakePercent: 0.17,        // Fraction of balance per trade
@@ -60,6 +63,10 @@ export function createStrategy(): StrategyInstance {
   let lastCrossoverSignal = 0;      // 1 = bullish, -1 = bearish, 0 = none
   let ticksSinceCrossover = 999;    // ticks since last crossover
 
+  // RSI state
+  let avgGain: number | null = null;
+  let avgLoss: number | null = null;
+
   function getMean(): number {
     const window = priceHistory.slice(-PARAMS.bbWindow);
     return window.reduce((s, p) => s + p, 0) / window.length;
@@ -71,8 +78,15 @@ export function createStrategy(): StrategyInstance {
     return Math.sqrt(variance);
   }
 
+  function getRSI(): number {
+    if (avgGain === null || avgLoss === null) return 50;
+    if (avgLoss === 0) return 100;
+    const rs = avgGain / avgLoss;
+    return 100 - (100 / (1 + rs));
+  }
+
   return {
-    name: "AutoResearch EMA 8/25 1tick-persist BB3.0 thresh0.6 cd3 s17-fixed dur4",
+    name: "AutoResearch EMA 8/25 RSI14-confirm 1tick-persist BB3.0 thresh0.6 cd3 s17 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -92,6 +106,15 @@ export function createStrategy(): StrategyInstance {
       const prevPrice = lastPrice;
       lastPrice = price;
 
+      // Update RSI
+      if (prevPrice !== null) {
+        const change = price - prevPrice;
+        const gain = change > 0 ? change : 0;
+        const loss = change < 0 ? -change : 0;
+        avgGain = updateEMA(avgGain, gain, PARAMS.rsiWindow);
+        avgLoss = updateEMA(avgLoss, loss, PARAMS.rsiWindow);
+      }
+
       if (totalTicks < PARAMS.minTicks) return null;
 
       const minStake = buyIn * 0.01;
@@ -104,7 +127,7 @@ export function createStrategy(): StrategyInstance {
       let reversionSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover + 1-tick persistence window
+      // 1. EMA Crossover + 1-tick persistence window (gated by RSI direction)
       ticksSinceCrossover++;
       if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
@@ -117,9 +140,15 @@ export function createStrategy(): StrategyInstance {
           ticksSinceCrossover = 0;
         }
       }
-      // Allow crossover signal to persist for 1 tick after crossing
+      // Allow crossover signal to persist for 1 tick; gate by RSI direction
       if (ticksSinceCrossover <= 1 && lastCrossoverSignal !== 0) {
-        trendSignal = lastCrossoverSignal;
+        const rsi = getRSI();
+        // RSI > 50 confirms bullish; RSI < 50 confirms bearish
+        const rsiConfirms = (lastCrossoverSignal === 1 && rsi > 50) ||
+                            (lastCrossoverSignal === -1 && rsi < 50);
+        if (rsiConfirms) {
+          trendSignal = lastCrossoverSignal;
+        }
       }
 
       // 2. Bollinger Bands
@@ -164,6 +193,8 @@ export function createStrategy(): StrategyInstance {
       totalTicks = 0;
       lastCrossoverSignal = 0;
       ticksSinceCrossover = 999;
+      avgGain = null;
+      avgLoss = null;
     },
   };
 }
