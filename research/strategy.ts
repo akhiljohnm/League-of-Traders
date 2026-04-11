@@ -35,7 +35,7 @@ const PARAMS = {
   minTicks: 15,              // Warmup period before first trade
 
   // Higher threshold = only very strong signals
-  compositeThreshold: 0.6,   // Very strict: requires EMA + momentum alignment
+  compositeThreshold: 0.7,   // Ultra strict: only EMA crossover + momentum aligned fires (0.5+0.2=0.7)
 };
 
 // ============================================================
@@ -70,7 +70,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.7 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
