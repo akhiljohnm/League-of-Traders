@@ -96,28 +96,67 @@ async function main(): Promise<void> {
     console.log(pad("status", "ok"));
   }
 
-  // Stage 2: Live validation (optional)
+  // Stage 2: Live validation (optional) — all 5 markets in parallel
   if (isLive) {
-    console.log("\n" + pad("live_validation", "starting..."));
+    const LIVE_SYMBOLS = ["1HZ100V", "1HZ75V", "1HZ50V", "1HZ25V", "1HZ10V"];
+    console.log(`\n` + pad("live_validation", `starting (${LIVE_SYMBOLS.length} markets in parallel)...`));
 
     try {
       const { runLiveEvaluation } = await import("./live-evaluator");
-      const liveResult = await runLiveEvaluation("1HZ100V", 300);
 
-      console.log("\n" + pad("live_score", String(liveResult.score)));
-      console.log(pad("live_net_pnl", String(liveResult.net_pnl)));
-      console.log(pad("live_win_rate", liveResult.win_rate + "%"));
-      console.log(pad("live_trades", String(liveResult.total_trades)));
-      console.log(pad("live_status", "ok"));
+      // Stagger connections by 1s to avoid rate limits (mirrors collect-all-markets.ts)
+      const livePromises = LIVE_SYMBOLS.map((symbol, i) =>
+        new Promise<{ symbol: string; result: BacktestResult | null }>((resolve) => {
+          setTimeout(async () => {
+            try {
+              const result = await runLiveEvaluation(symbol, 300);
+              resolve({ symbol, result });
+            } catch (err) {
+              console.error(pad("live_error", `${symbol}: ${err}`));
+              resolve({ symbol, result: null });
+            }
+          }, i * 1000);
+        })
+      );
 
-      // Compare to pre-recorded score
-      if (results.length > 0) {
-        const avgScore = round2(results.reduce((s, r) => s + r.score, 0) / results.length);
-        const scoreDelta = round2(liveResult.score - avgScore);
-        console.log(pad("live_vs_recorded", `${scoreDelta > 0 ? "+" : ""}${scoreDelta}`));
+      const liveResults = await Promise.all(livePromises);
 
-        if (scoreDelta < -10) {
-          console.log(pad("overfitting_warning", "live score significantly lower than recorded"));
+      // Print per-market live results
+      const validResults: BacktestResult[] = [];
+      for (const { symbol, result } of liveResults) {
+        if (result) {
+          console.log(`\n[Live] ${symbol}`);
+          console.log(pad("live_score", String(result.score)));
+          console.log(pad("live_net_pnl", String(result.net_pnl)));
+          console.log(pad("live_win_rate", result.win_rate + "%"));
+          console.log(pad("live_trades", String(result.total_trades)));
+          validResults.push(result);
+        }
+      }
+
+      // Print aggregate live metrics
+      if (validResults.length > 0) {
+        const avgLiveScore = round2(validResults.reduce((s, r) => s + r.score, 0) / validResults.length);
+        const avgLivePnl = round2(validResults.reduce((s, r) => s + r.net_pnl, 0) / validResults.length);
+        const avgLiveWinRate = round2(validResults.reduce((s, r) => s + r.win_rate, 0) / validResults.length);
+
+        console.log("\n" + pad("avg_live_score", String(avgLiveScore)));
+        console.log(pad("avg_live_net_pnl", String(avgLivePnl)));
+        console.log(pad("avg_live_win_rate", avgLiveWinRate + "%"));
+        console.log(pad("live_markets", `${validResults.length}/${LIVE_SYMBOLS.length}`));
+        console.log(pad("live_status", "ok"));
+
+        // Compare avg_live_score to pre-recorded avg_score
+        if (results.length > 0) {
+          const avgRecordedScore = round2(results.reduce((s, r) => s + r.score, 0) / results.length);
+          const scoreDelta = round2(avgLiveScore - avgRecordedScore);
+          console.log(pad("live_vs_recorded", `${scoreDelta > 0 ? "+" : ""}${scoreDelta}`));
+
+          if (avgLiveScore < 0) {
+            console.log(pad("live_warning", "NEGATIVE avg_live_score — stop loop, revert to last positive live result"));
+          } else if (avgRecordedScore > 0 && scoreDelta < -(avgRecordedScore * 0.5)) {
+            console.log(pad("overfitting_warning", "avg_live_score >50% lower than recorded — likely overfitting"));
+          }
         }
       }
     } catch (err) {
