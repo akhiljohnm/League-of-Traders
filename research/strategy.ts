@@ -181,7 +181,7 @@ export function createStrategy(): StrategyInstance {
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
       // Drawdown protection: two-tier. Deep loss (<75%) → 20% stake; mild loss (<95%) → 60% stake
       // Late game (balance > buyIn) is immune since buyIn > buyIn*0.95 always
-      const drawdownFactor = balance < buyIn * 0.75 ? 0.20 : balance < buyIn * 0.95 ? 0.60 : 1.0;
+      const drawdownFactor = balance < buyIn * 0.75 ? 0.10 : balance < buyIn * 0.95 ? 0.60 : 1.0;
       const stakeAmt = Math.round(
         balance * (isLateGame ? PARAMS.stakePercent * PARAMS.lateGameMultiplier : PARAMS.stakePercent * drawdownFactor) * 100
       ) / 100;
