@@ -62,7 +62,9 @@ export function createStrategy(): StrategyInstance {
   let totalTicks = 0;
   let lastCrossoverSignal = 0;      // 1 = bullish, -1 = bearish, 0 = none
   let ticksSinceCrossover = 999;    // ticks since last crossover
-  let prevEMAGap: number | null = null;   // previous EMA gap for velocity calc
+  let prevEMAGap: number | null = null;   // previous EMA gap (1-tick)
+  let emaGap3ago: number | null = null;   // EMA gap 3 ticks ago for smoother velocity
+  let emaGap2ago: number | null = null;
 
   // RSI state
   let avgGain: number | null = null;
@@ -87,7 +89,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/25 RSI+velocity 1tick-persist BB3.0 thresh0.6 cd3 s19 dur4",
+    name: "AutoResearch EMA 8/25 RSI+vel3 1tick-persist BB3.0 thresh0.6 cd3 s19 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -170,12 +172,17 @@ export function createStrategy(): StrategyInstance {
         momentumSignal = price > prevPrice ? 1.0 : -1.0;
       }
 
-      // 4. EMA Gap Velocity (is the trend accelerating?)
+      // 4. EMA Gap Velocity (3-tick smoothed: is trend strengthening over last 3 ticks?)
       if (shortEMA !== null && longEMA !== null) {
         const emaGap = shortEMA - longEMA;
-        if (prevEMAGap !== null && emaGap !== prevEMAGap) {
+        if (emaGap3ago !== null) {
+          // Compare current gap to 3 ticks ago for smoother velocity
+          velocitySignal = emaGap > emaGap3ago ? 1.0 : emaGap < emaGap3ago ? -1.0 : 0;
+        } else if (prevEMAGap !== null && emaGap !== prevEMAGap) {
           velocitySignal = emaGap > prevEMAGap ? 1.0 : -1.0;
         }
+        emaGap3ago = emaGap2ago;
+        emaGap2ago = prevEMAGap;
         prevEMAGap = emaGap;
       }
 
@@ -207,6 +214,8 @@ export function createStrategy(): StrategyInstance {
       avgGain = null;
       avgLoss = null;
       prevEMAGap = null;
+      emaGap2ago = null;
+      emaGap3ago = null;
     },
   };
 }
