@@ -70,7 +70,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 blend0.6/0.2/0.2 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -127,9 +127,8 @@ export function createStrategy(): StrategyInstance {
         momentumSignal = price > prevPrice ? 1.0 : -1.0;
       }
 
-      // Blend: 0.6 trend + 0.2 reversion + 0.2 momentum
-      // EMA crossover alone hits threshold 0.6; crossover+momentum=0.8 stronger
-      const composite = trendSignal * 0.6 + reversionSignal * 0.2 + momentumSignal * 0.2;
+      // Blend: 0.5 trend + 0.3 reversion + 0.2 momentum
+      const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
 
       if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
 
