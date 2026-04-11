@@ -55,8 +55,6 @@ export function createStrategy(): StrategyInstance {
   let prevLongEMA: number | null = null;
   let priceHistory: number[] = [];
   let lastPrice: number | null = null;
-  let prevPrice2: number | null = null;  // price 2 ticks ago
-  let prevPrice3: number | null = null;  // price 3 ticks ago
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
   let totalTicks = 0;
 
@@ -72,7 +70,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 + 3bar-momentum-OR cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -90,8 +88,6 @@ export function createStrategy(): StrategyInstance {
       longEMA = updateEMA(longEMA, price, PARAMS.longWindow);
 
       const prevPrice = lastPrice;
-      prevPrice3 = prevPrice2;
-      prevPrice2 = lastPrice;
       lastPrice = price;
 
       if (totalTicks < PARAMS.minTicks) return null;
@@ -126,38 +122,17 @@ export function createStrategy(): StrategyInstance {
         }
       }
 
-      // 3. Micro-Momentum (single tick)
+      // 3. Micro-Momentum
       if (prevPrice !== null && price !== prevPrice) {
         momentumSignal = price > prevPrice ? 1.0 : -1.0;
-      }
-
-      // 4. 3-Bar Momentum: all 3 consecutive price moves in same direction
-      // This provides additional high-confidence signals without EMA crossover
-      let threBarMomentum = 0;
-      if (prevPrice !== null && prevPrice2 !== null && prevPrice3 !== null) {
-        const m1 = price > prevPrice;
-        const m2 = prevPrice > prevPrice2;
-        const m3 = prevPrice2 > prevPrice3;
-        if (m1 && m2 && m3) threBarMomentum = 1.0;   // 3 consecutive up moves
-        else if (!m1 && !m2 && !m3 && price !== prevPrice && prevPrice !== prevPrice2 && prevPrice2 !== prevPrice3)
-          threBarMomentum = -1.0;  // 3 consecutive down moves
       }
 
       // Blend: 0.5 trend + 0.3 reversion + 0.2 momentum
       const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
 
-      // 3-bar momentum fires as additional OR condition (requires EMA trend agreement)
-      const emaUptrend = shortEMA !== null && longEMA !== null && shortEMA > longEMA;
-      const emaDowntrend = shortEMA !== null && longEMA !== null && shortEMA < longEMA;
-      const threBarFires = (threBarMomentum > 0 && emaUptrend) || (threBarMomentum < 0 && emaDowntrend);
+      if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
 
-      if (Math.abs(composite) < PARAMS.compositeThreshold && !threBarFires) return null;
-
-      // Determine direction (3-bar fires if composite gate fails)
-      let rawDir: number;
-      if (Math.abs(composite) >= PARAMS.compositeThreshold) rawDir = composite;
-      else rawDir = threBarMomentum; // threBarFires guaranteed true here
-      const direction: "UP" | "DOWN" = rawDir > 0 ? "UP" : "DOWN";
+      const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
       const stakeAmt = Math.round(balance * PARAMS.stakePercent * 100) / 100;
       if (stakeAmt < minStake) return null;
 
@@ -172,8 +147,6 @@ export function createStrategy(): StrategyInstance {
       prevLongEMA = null;
       priceHistory = [];
       lastPrice = null;
-      prevPrice2 = null;
-      prevPrice3 = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
       totalTicks = 0;
     },
