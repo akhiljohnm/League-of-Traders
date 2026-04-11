@@ -20,22 +20,24 @@ import type { Tick, TradeDecision, StrategyInstance } from "./types";
 // ============================================================
 
 const PARAMS = {
-  // EMA Crossover (Trend Following)
-  shortWindow: 8,            // Short EMA period
-  longWindow: 21,            // Long EMA period
+  // EMA Crossover — two timeframes must agree
+  fastShortWindow: 5,        // Fast EMA pair: short period
+  fastLongWindow: 13,        // Fast EMA pair: long period
+  slowShortWindow: 8,        // Slow EMA pair: short period
+  slowLongWindow: 21,        // Slow EMA pair: long period
 
-  // Bollinger Bands (Mean Reversion)
-  bbWindow: 20,              // Rolling window for mean + stddev
-  bbMultiplier: 3.0,         // Stddev multiplier for BB bands
+  // Bollinger Bands (Mean Reversion — disabled at 3.0)
+  bbWindow: 20,
+  bbMultiplier: 3.0,
 
   // Trade Management
   contractDuration: 4,       // Ticks per contract
   stakePercent: 0.14,        // Fraction of balance per trade
-  cooldownTicks: 3,          // Min ticks between signal trades (lower to get more trades)
+  cooldownTicks: 3,          // Min ticks between signal trades
   minTicks: 15,              // Warmup period before first trade
 
   // Higher threshold = only very strong signals
-  compositeThreshold: 0.6,   // Very strict: requires EMA + momentum alignment
+  compositeThreshold: 0.6,   // Requires aligned multi-timeframe + momentum
 };
 
 // ============================================================
@@ -49,10 +51,16 @@ function updateEMA(current: number | null, price: number, period: number): numbe
 }
 
 export function createStrategy(): StrategyInstance {
-  let shortEMA: number | null = null;
-  let longEMA: number | null = null;
-  let prevShortEMA: number | null = null;
-  let prevLongEMA: number | null = null;
+  // Fast EMA pair
+  let fastShortEMA: number | null = null;
+  let fastLongEMA: number | null = null;
+  let prevFastShortEMA: number | null = null;
+  let prevFastLongEMA: number | null = null;
+  // Slow EMA pair
+  let slowShortEMA: number | null = null;
+  let slowLongEMA: number | null = null;
+  let prevSlowShortEMA: number | null = null;
+  let prevSlowLongEMA: number | null = null;
   let priceHistory: number[] = [];
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
@@ -70,7 +78,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch multi-TF EMA (5/13 + 8/21 agree) thresh0.6 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -82,10 +90,14 @@ export function createStrategy(): StrategyInstance {
         priceHistory = priceHistory.slice(-PARAMS.bbWindow * 2);
       }
 
-      prevShortEMA = shortEMA;
-      prevLongEMA = longEMA;
-      shortEMA = updateEMA(shortEMA, price, PARAMS.shortWindow);
-      longEMA = updateEMA(longEMA, price, PARAMS.longWindow);
+      prevFastShortEMA = fastShortEMA;
+      prevFastLongEMA = fastLongEMA;
+      prevSlowShortEMA = slowShortEMA;
+      prevSlowLongEMA = slowLongEMA;
+      fastShortEMA = updateEMA(fastShortEMA, price, PARAMS.fastShortWindow);
+      fastLongEMA = updateEMA(fastLongEMA, price, PARAMS.fastLongWindow);
+      slowShortEMA = updateEMA(slowShortEMA, price, PARAMS.slowShortWindow);
+      slowLongEMA = updateEMA(slowLongEMA, price, PARAMS.slowLongWindow);
 
       const prevPrice = lastPrice;
       lastPrice = price;
@@ -99,36 +111,43 @@ export function createStrategy(): StrategyInstance {
 
       // ---- Signals ----
       let trendSignal = 0;
-      let reversionSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover
-      if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
-        const prevDiff = prevShortEMA - prevLongEMA;
-        const currDiff = shortEMA - longEMA;
-        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
-        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
+      // 1. Multi-Timeframe EMA Agreement
+      // Both fast (5/13) and slow (8/21) crossovers must agree AND momentum confirms
+      if (prevFastShortEMA !== null && prevFastLongEMA !== null && fastShortEMA !== null && fastLongEMA !== null &&
+          prevSlowShortEMA !== null && prevSlowLongEMA !== null && slowShortEMA !== null && slowLongEMA !== null) {
+        const fastPrevDiff = prevFastShortEMA - prevFastLongEMA;
+        const fastCurrDiff = fastShortEMA - fastLongEMA;
+        const slowPrevDiff = prevSlowShortEMA - prevSlowLongEMA;
+        const slowCurrDiff = slowShortEMA - slowLongEMA;
+
+        // Fast crossover
+        const fastCrossUp = fastPrevDiff <= 0 && fastCurrDiff > 0;
+        const fastCrossDown = fastPrevDiff >= 0 && fastCurrDiff < 0;
+
+        // Slow crossover
+        const slowCrossUp = slowPrevDiff <= 0 && slowCurrDiff > 0;
+        const slowCrossDown = slowPrevDiff >= 0 && slowCurrDiff < 0;
+
+        // Either fast or slow crossover fires, AND both EMAs agree on direction
+        const fastUptrend = fastCurrDiff > 0;
+        const fastDowntrend = fastCurrDiff < 0;
+        const slowUptrend = slowCurrDiff > 0;
+        const slowDowntrend = slowCurrDiff < 0;
+
+        // Fire when EITHER pair crosses AND both timeframes agree on current direction
+        if ((fastCrossUp || slowCrossUp) && fastUptrend && slowUptrend) trendSignal = 1.0;
+        else if ((fastCrossDown || slowCrossDown) && fastDowntrend && slowDowntrend) trendSignal = -1.0;
       }
 
-      // 2. Bollinger Bands
-      if (priceHistory.length >= PARAMS.bbWindow) {
-        const mean = getMean();
-        const stdDev = getStdDev(mean);
-        if (stdDev > 0) {
-          const upper = mean + PARAMS.bbMultiplier * stdDev;
-          const lower = mean - PARAMS.bbMultiplier * stdDev;
-          if (price > upper) reversionSignal = -1.0;
-          else if (price < lower) reversionSignal = 1.0;
-        }
-      }
-
-      // 3. Micro-Momentum
+      // 2. Micro-Momentum
       if (prevPrice !== null && price !== prevPrice) {
         momentumSignal = price > prevPrice ? 1.0 : -1.0;
       }
 
-      // Blend: 0.5 trend + 0.3 reversion + 0.2 momentum
-      const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
+      // Blend: 0.5 trend + 0.5 momentum (BB disabled)
+      const composite = trendSignal * 0.5 + momentumSignal * 0.2;
 
       if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
 
@@ -141,10 +160,14 @@ export function createStrategy(): StrategyInstance {
     },
 
     reset() {
-      shortEMA = null;
-      longEMA = null;
-      prevShortEMA = null;
-      prevLongEMA = null;
+      fastShortEMA = null;
+      fastLongEMA = null;
+      prevFastShortEMA = null;
+      prevFastLongEMA = null;
+      slowShortEMA = null;
+      slowLongEMA = null;
+      prevSlowShortEMA = null;
+      prevSlowLongEMA = null;
       priceHistory = [];
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
