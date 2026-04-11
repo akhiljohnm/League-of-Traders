@@ -168,6 +168,8 @@ export function createStrategy(): StrategyInstance {
         const recentTrend = (balance - balanceHistory[0]) / balanceHistory[0];
         if (recentTrend > 0.05) regularThreshold = 0.20;       // winning regime → more trades
       }
+      // High-vol early game: require stronger signal (blocks pure BB reversion)
+      if (relVol > 0.0006) regularThreshold = Math.max(regularThreshold, 0.50);
       // Late game requires strong signal: trend+momentum (0.70) or better
       const signalThreshold = isLateGame ? 0.70 : regularThreshold;
       if (Math.abs(composite) < signalThreshold) return null;
