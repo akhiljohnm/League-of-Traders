@@ -22,6 +22,8 @@ export interface TickDataset {
 export interface TradeDecision {
   direction: "UP" | "DOWN";
   stake: number;
+  /** Contract duration in ticks. Allowed values: 1, 2, 3, 4, 5, 6, 8, 10. Defaults to 5. */
+  duration?: number;
 }
 
 /** The strategy interface the optimizer works with */
