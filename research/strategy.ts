@@ -20,29 +20,22 @@ import type { Tick, TradeDecision, StrategyInstance } from "./types";
 // ============================================================
 
 const PARAMS = {
-  // Regime Detection
-  volWindow: 10,              // Ticks for rolling volatility measurement
-  volThreshold: 0.05,         // Price change std-dev split: above = high-vol, below = low-vol
+  // EMA Crossover (Trend Following)
+  shortWindow: 8,            // Short EMA period
+  longWindow: 21,            // Long EMA period
 
-  // Low-vol regime (cleaner trends, react faster)
-  lowVolShortWindow: 8,       // Short EMA period in low-vol
-  lowVolLongWindow: 17,       // Long EMA period in low-vol
-  lowVolThreshold: 0.6,       // Composite threshold in low-vol
-
-  // High-vol regime (noisy, use wider/slower EMAs)
-  highVolShortWindow: 10,     // Short EMA period in high-vol
-  highVolLongWindow: 25,      // Long EMA period in high-vol
-  highVolThreshold: 0.7,      // Composite threshold in high-vol (stricter)
-
-  // Bollinger Bands (Mean Reversion — effectively disabled at 3.0)
+  // Bollinger Bands (Mean Reversion)
   bbWindow: 20,              // Rolling window for mean + stddev
   bbMultiplier: 3.0,         // Stddev multiplier for BB bands
 
   // Trade Management
   contractDuration: 4,       // Ticks per contract
   stakePercent: 0.14,        // Fraction of balance per trade
-  cooldownTicks: 3,          // Min ticks between signal trades
+  cooldownTicks: 3,          // Min ticks between signal trades (lower to get more trades)
   minTicks: 15,              // Warmup period before first trade
+
+  // Higher threshold = only very strong signals
+  compositeThreshold: 0.6,   // Very strict: requires EMA + momentum alignment
 };
 
 // ============================================================
@@ -56,19 +49,11 @@ function updateEMA(current: number | null, price: number, period: number): numbe
 }
 
 export function createStrategy(): StrategyInstance {
-  // Dual EMA state (we maintain all 4 EMAs and pick based on regime)
-  let lowShortEMA: number | null = null;
-  let lowLongEMA: number | null = null;
-  let prevLowShortEMA: number | null = null;
-  let prevLowLongEMA: number | null = null;
-
-  let highShortEMA: number | null = null;
-  let highLongEMA: number | null = null;
-  let prevHighShortEMA: number | null = null;
-  let prevHighLongEMA: number | null = null;
-
+  let shortEMA: number | null = null;
+  let longEMA: number | null = null;
+  let prevShortEMA: number | null = null;
+  let prevLongEMA: number | null = null;
   let priceHistory: number[] = [];
-  let priceChanges: number[] = [];
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
   let totalTicks = 0;
@@ -84,16 +69,8 @@ export function createStrategy(): StrategyInstance {
     return Math.sqrt(variance);
   }
 
-  function getVolatility(): number {
-    const changes = priceChanges.slice(-PARAMS.volWindow);
-    if (changes.length < 3) return 0;
-    const mean = changes.reduce((s, c) => s + c, 0) / changes.length;
-    const variance = changes.reduce((s, c) => s + (c - mean) ** 2, 0) / changes.length;
-    return Math.sqrt(variance);
-  }
-
   return {
-    name: "AutoResearch RegimeAdaptive EMA(8/17 low, 10/25 high) s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -105,24 +82,10 @@ export function createStrategy(): StrategyInstance {
         priceHistory = priceHistory.slice(-PARAMS.bbWindow * 2);
       }
 
-      if (lastPrice !== null) {
-        const absChange = Math.abs(price - lastPrice) / lastPrice;
-        priceChanges.push(absChange);
-        if (priceChanges.length > PARAMS.volWindow * 3) {
-          priceChanges = priceChanges.slice(-PARAMS.volWindow * 3);
-        }
-      }
-
-      // Update all 4 EMAs continuously
-      prevLowShortEMA = lowShortEMA;
-      prevLowLongEMA = lowLongEMA;
-      prevHighShortEMA = highShortEMA;
-      prevHighLongEMA = highLongEMA;
-
-      lowShortEMA = updateEMA(lowShortEMA, price, PARAMS.lowVolShortWindow);
-      lowLongEMA = updateEMA(lowLongEMA, price, PARAMS.lowVolLongWindow);
-      highShortEMA = updateEMA(highShortEMA, price, PARAMS.highVolShortWindow);
-      highLongEMA = updateEMA(highLongEMA, price, PARAMS.highVolLongWindow);
+      prevShortEMA = shortEMA;
+      prevLongEMA = longEMA;
+      shortEMA = updateEMA(shortEMA, price, PARAMS.shortWindow);
+      longEMA = updateEMA(longEMA, price, PARAMS.longWindow);
 
       const prevPrice = lastPrice;
       lastPrice = price;
@@ -133,16 +96,6 @@ export function createStrategy(): StrategyInstance {
       if (balance < minStake * 2) return null;
 
       if (ticksSinceLastTrade < PARAMS.cooldownTicks) return null;
-
-      // ---- Regime Detection ----
-      const vol = getVolatility();
-      const isHighVol = vol > PARAMS.volThreshold;
-
-      const shortEMA = isHighVol ? highShortEMA : lowShortEMA;
-      const longEMA = isHighVol ? highLongEMA : lowLongEMA;
-      const prevShortEMA = isHighVol ? prevHighShortEMA : prevLowShortEMA;
-      const prevLongEMA = isHighVol ? prevHighLongEMA : prevLowLongEMA;
-      const compositeThreshold = isHighVol ? PARAMS.highVolThreshold : PARAMS.lowVolThreshold;
 
       // ---- Signals ----
       let trendSignal = 0;
@@ -177,7 +130,7 @@ export function createStrategy(): StrategyInstance {
       // Blend: 0.5 trend + 0.3 reversion + 0.2 momentum
       const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
 
-      if (Math.abs(composite) < compositeThreshold) return null;
+      if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
       const stakeAmt = Math.round(balance * PARAMS.stakePercent * 100) / 100;
@@ -188,16 +141,11 @@ export function createStrategy(): StrategyInstance {
     },
 
     reset() {
-      lowShortEMA = null;
-      lowLongEMA = null;
-      prevLowShortEMA = null;
-      prevLowLongEMA = null;
-      highShortEMA = null;
-      highLongEMA = null;
-      prevHighShortEMA = null;
-      prevHighLongEMA = null;
+      shortEMA = null;
+      longEMA = null;
+      prevShortEMA = null;
+      prevLongEMA = null;
       priceHistory = [];
-      priceChanges = [];
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
       totalTicks = 0;
