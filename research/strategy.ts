@@ -70,7 +70,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14-fixed dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -133,7 +133,8 @@ export function createStrategy(): StrategyInstance {
       if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
-      const stakeAmt = Math.round(balance * PARAMS.stakePercent * 100) / 100;
+      // Fixed dollar sizing based on buy-in (not current balance) — reduces outcome variance
+      const stakeAmt = Math.round(buyIn * PARAMS.stakePercent * 100) / 100;
       if (stakeAmt < minStake) return null;
 
       ticksSinceLastTrade = 0;
