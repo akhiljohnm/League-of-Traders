@@ -67,7 +67,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch dual-path EMA-xover+mom OR BB-reversion-in-trend cd3 s14 dur4",
+    name: "AutoResearch dual-path EMA-xover+momentum OR BB-pullback+momentum cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -118,10 +118,10 @@ export function createStrategy(): StrategyInstance {
         if (stdDev > 0) {
           const upper = mean + PARAMS.bbMultiplier * stdDev;
           const lower = mean - PARAMS.bbMultiplier * stdDev;
-          // Reversion: price at lower BB in uptrend → expect bounce back up (no momentum needed)
-          bbPullbackUp = price < lower && emaUptrend;
-          // Reversion: price at upper BB in downtrend → expect fall back down
-          bbPullbackDown = price > upper && emaDowntrend;
+          // Pullback: price hits lower BB but EMA says uptrend → buy the dip with momentum confirm
+          bbPullbackUp = price < lower && emaUptrend && momentumUp;
+          // Pullback: price hits upper BB but EMA says downtrend → sell the bounce with momentum
+          bbPullbackDown = price > upper && emaDowntrend && momentumDown;
         }
       }
 
