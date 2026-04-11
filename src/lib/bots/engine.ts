@@ -16,6 +16,7 @@ interface PendingTrade {
   stake: number;
   entryPrice: number;
   entryTick: number; // tick index when trade was placed
+  duration: number;  // ticks until this trade resolves
 }
 
 interface ManagedBot {
@@ -70,10 +71,17 @@ export class BotEngine {
     await this.resolveMaturedTrades(tick);
 
     // 2. Feed tick to each bot's strategy and collect decisions
+    //    Pass the per-bot open trade count so strategies can cap concurrent exposure.
     const decisions: { botId: string; decision: TradeDecision }[] = [];
 
+    const openTradesByBot = new Map<string, number>();
+    for (const trade of this.pendingTrades) {
+      openTradesByBot.set(trade.botId, (openTradesByBot.get(trade.botId) ?? 0) + 1);
+    }
+
     for (const [botId, bot] of this.bots) {
-      const decision = bot.strategy.onTick(tick, bot.balance, this.getInitialBalance(botId));
+      const openTrades = openTradesByBot.get(botId) ?? 0;
+      const decision = bot.strategy.onTick(tick, bot.balance, this.getInitialBalance(botId), openTrades);
       if (decision) {
         decisions.push({ botId, decision });
       }
@@ -121,6 +129,7 @@ export class BotEngine {
         stake: actualStake,
         entryPrice,
         entryTick: this.tickIndex,
+        duration: decision.duration ?? TRADE_DURATION_TICKS,
       });
 
       console.log(
@@ -144,7 +153,7 @@ export class BotEngine {
     const remaining: PendingTrade[] = [];
 
     for (const trade of this.pendingTrades) {
-      if (this.tickIndex - trade.entryTick >= TRADE_DURATION_TICKS) {
+      if (this.tickIndex - trade.entryTick >= trade.duration) {
         matured.push(trade);
       } else {
         remaining.push(trade);
@@ -182,9 +191,10 @@ export class BotEngine {
       `[BotEngine] Force-resolving ${this.pendingTrades.length} remaining trades`
     );
 
-    // Temporarily set tickIndex far ahead to mature all trades
+    // Temporarily set tickIndex far ahead to mature all pending trades
     const savedIndex = this.tickIndex;
-    this.tickIndex = savedIndex + TRADE_DURATION_TICKS + 1;
+    const maxDuration = this.pendingTrades.reduce((max, t) => Math.max(max, t.duration), 0);
+    this.tickIndex = savedIndex + maxDuration + 1;
     await this.resolveMaturedTrades(finalTick);
     this.tickIndex = savedIndex;
   }

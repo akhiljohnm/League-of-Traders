@@ -128,6 +128,7 @@ The game uses Rise/Fall contracts: predict whether the price will be higher (UP/
 - **Game duration**: 300 ticks (~5 minutes). Must place at least 5 trades (quota).
 - **Buy-in**: $10,000 virtual balance.
 - **Contract duration**: The number of ticks before a contract closes is a tunable hyperparameter. Allowed values: 1, 2, 3, 4, 5, 6, 8, 10. Shorter durations (1–3 ticks) react faster but are noisier; longer durations (6–10 ticks) smooth out noise but slow the feedback loop. Can be optimized per-strategy or varied dynamically.
+- **Concurrent positions**: A bot does NOT need to wait for a trade to resolve before placing the next one. Multiple trades can be live at the same time. Stake is deducted from balance immediately on placement. Each strategy has a `maxConcurrentTrades` cap (e.g. 2–4) to control maximum simultaneous exposure. `cooldownTicks` governs signal-check frequency, not trade resolution waiting. This means `cooldown < duration` is valid and intentional — the bot can have several open trades stacked. Optimizing `maxConcurrentTrades` and `cooldownTicks` together is a valid research axis.
 - **Optimal trade frequency**: Too few trades = insufficient samples, too many = balance churn. Sweet spot is 10-30 trades per game.
 - **Markets vary**: Volatility 100 has the most movement (easier signals), Volatility 10 the least (harder to predict). A robust strategy should handle all.
 

@@ -1,7 +1,7 @@
 import type { DerivTick } from "@/lib/types/deriv";
 import type { BotStrategyInstance, TradeDecision, MeanReverterParams } from "../types";
 import { DEFAULT_MEAN_REVERTER_PARAMS, GAME_TOTAL_TICKS, MIN_TRADES_QUOTA } from "../types";
-import { createBrain } from "../brain";
+import { createBrain, BRAIN_PARAMS } from "../brain";
 
 // ============================================================
 // The Mean Reverter — MEDIUM RISK personality
@@ -29,39 +29,36 @@ export function createMeanReverter(
    */
   const REVERSION_THRESHOLD = 0.3;
 
-  function computeStake(balance: number, buyIn: number): number {
-    const ticksRemaining = GAME_TOTAL_TICKS - totalTicks;
+  function computeStake(balance: number, buyIn: number, suggestedStakePct: number): number {
     const isRescue = balance < buyIn;
     const isAlpha = balance > buyIn;
-    const isLateGame = ticksRemaining < 60;
 
     let multiplier = 1.0;
-    if (isRescue) {
-      multiplier = 1.5;
-    } else if (isAlpha) {
-      multiplier = isLateGame ? 0.56 : 0.8;
-    }
+    if (isRescue) multiplier = 1.2;
+    else if (isAlpha) multiplier = 0.85;
 
+    const base = suggestedStakePct > 0 ? suggestedStakePct : config.stakePercent;
     return Math.min(
-      Math.round(balance * config.stakePercent * multiplier * 100) / 100,
-      balance * 0.25
+      Math.round(balance * base * multiplier * 100) / 100,
+      balance * 0.95
     );
   }
 
   return {
     name: "Mean Reverter",
 
-    onTick(tick: DerivTick, balance: number, buyIn: number): TradeDecision | null {
+    onTick(tick: DerivTick, balance: number, buyIn: number, openTrades: number): TradeDecision | null {
       totalTicks++;
       ticksSinceLastTrade++;
 
-      const signal = brain.process(tick);
+      const signal = brain.process(tick, balance, buyIn);
 
       // Warmup
-      if (totalTicks < config.minTicks || signal.warming) return null;
+      if (signal.warming) return null;
 
-      // Don't trade if balance is too low
+      // Hard stop: near-bankruptcy → no trades at all
       const minStake = buyIn * 0.01;
+      if (balance < buyIn * BRAIN_PARAMS.hardStopAt) return null;
       if (balance < minStake * 2) return null;
 
       // --- QUOTA URGENCY: force trades to avoid inactive forfeit ---
@@ -73,35 +70,50 @@ export function createMeanReverter(
           signal.reversion !== 0
             ? (signal.reversion > 0 ? "UP" : "DOWN")
             : (signal.composite >= 0 ? "UP" : "DOWN");
-        const stake = computeStake(balance, buyIn);
+        const stake = computeStake(balance, buyIn, signal.suggestedStakePct);
         if (stake < minStake) return null;
 
         ticksSinceLastTrade = 0;
         tradesPlaced++;
         console.log(
-          `[MR] QUOTA URGENCY: forced trade #${tradesPlaced} -> ${direction} $${stake.toFixed(2)} (${tradesNeeded - 1} more needed, ${ticksRemaining} ticks left)`
+          `[MR] QUOTA URGENCY: forced trade #${tradesPlaced} -> ${direction} $${stake.toFixed(2)} (${tradesNeeded - 1} more needed, ${ticksRemaining} ticks left, open=${openTrades})`
         );
-        return { direction, stake };
+        return { direction, stake, duration: signal.suggestedDuration };
       }
 
-      // Respect cooldown
+      // Mid-game freeze: conserve capital for late-game all-in
+      if (signal.isMidGameFreeze) return null;
+
+      // Respect cooldown (signal frequency — not trade resolution)
       if (ticksSinceLastTrade < config.cooldownTicks) return null;
 
-      // PERSONALITY: Only trade when the REVERSION signal fires
-      // (price is outside Bollinger Bands — overbought or oversold)
-      if (Math.abs(signal.reversion) < REVERSION_THRESHOLD) return null;
+      // Cap concurrent exposure
+      if (openTrades >= config.maxConcurrentTrades) return null;
 
-      // Use the reversion signal direction (contrarian play)
-      const direction: "UP" | "DOWN" = signal.reversion > 0 ? "UP" : "DOWN";
-      const stake = computeStake(balance, buyIn);
+      // PERSONALITY: contrarian — only trade when reversion signal fires.
+      // During late game, fall back to composite direction (any strong signal).
+      if (signal.isLateGame) {
+        if (Math.abs(signal.composite) < signal.adaptiveThreshold) return null;
+      } else {
+        if (Math.abs(signal.reversion) < REVERSION_THRESHOLD) return null;
+        // Also gate on composite exceeding adaptive threshold to avoid high-vol noise
+        if (Math.abs(signal.composite) < signal.adaptiveThreshold) return null;
+      }
+
+      const direction: "UP" | "DOWN" = signal.isLateGame
+        ? (signal.composite > 0 ? "UP" : "DOWN")
+        : (signal.reversion > 0 ? "UP" : "DOWN");
+
+      const stake = computeStake(balance, buyIn, signal.suggestedStakePct);
       if (stake < minStake) return null;
 
       ticksSinceLastTrade = 0;
       tradesPlaced++;
+      const phase = signal.isLateGame ? "LATE-GAME" : (signal.reversion > 0 ? "OVERSOLD->UP" : "OVERBOUGHT->DOWN");
       console.log(
-        `[MR] Reversion signal: ${signal.reversion > 0 ? "OVERSOLD->UP" : "OVERBOUGHT->DOWN"} (composite=${signal.composite.toFixed(3)}) -> ${direction} $${stake.toFixed(2)} (trade #${tradesPlaced})`
+        `[MR] ${phase} (composite=${signal.composite.toFixed(3)}, vol=${signal.relVol.toFixed(5)}) -> ${direction} $${stake.toFixed(2)} dur=${signal.suggestedDuration} (trade #${tradesPlaced}, open=${openTrades + 1})`
       );
-      return { direction, stake };
+      return { direction, stake, duration: signal.suggestedDuration };
     },
 
     reset() {

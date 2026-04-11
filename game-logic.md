@@ -46,6 +46,12 @@ The number of ticks before resolution can vary. Allowed values: **1, 2, 3, 4, 5,
 * **5–6 ticks:** Standard (default: 5 ticks, recommended for humans and bots)
 * **8–10 ticks:** Medium-term, smoother signal but slower feedback
 
+### Concurrent Positions
+A player or bot does **not** need to wait for an open contract to resolve before placing the next one. Multiple contracts can be live simultaneously.
+* **Stake deduction is immediate:** The moment a trade is placed, the stake is subtracted from the player's balance. The available balance for the next trade is the post-deduction amount.
+* **Concurrent cap:** Each bot personality enforces a maximum number of simultaneously open trades (`maxConcurrentTrades`) to prevent runaway capital exposure. Bots use a separate cooldown to control signal frequency independently of trade resolution.
+* **Human players** face the same rules — they may stack trades freely, limited only by their available balance.
+
 ### Implementation
 * **Shared Module:** `src/lib/game/rise-fall.ts` — used by both human trading UI and BotEngine
 * **Trade Lifecycle:** `open` → `won` / `lost` (stored in Supabase `trades` table)

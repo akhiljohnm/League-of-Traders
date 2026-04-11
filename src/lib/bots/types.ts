@@ -11,6 +11,8 @@ import type { TradeDirection } from "@/lib/types/database";
 export interface TradeDecision {
   direction: TradeDirection;
   stake: number;
+  /** Contract duration in ticks. Allowed: 1, 2, 3, 4, 5, 6, 8, 10. Defaults to TRADE_DURATION_TICKS. */
+  duration?: number;
 }
 
 /**
@@ -24,11 +26,12 @@ export interface BotStrategyInstance {
 
   /**
    * Process a new tick. Returns a trade decision or null (hold).
-   * @param tick  - The latest Deriv tick
-   * @param balance - The bot's current virtual balance
-   * @param buyIn - The lobby buy-in (used for stake floor calculations)
+   * @param tick       - The latest Deriv tick
+   * @param balance    - The bot's current virtual balance (stake already deducted for open trades)
+   * @param buyIn      - The lobby buy-in (used for stake floor calculations)
+   * @param openTrades - Number of currently live (unresolved) trades for this bot
    */
-  onTick(tick: DerivTick, balance: number, buyIn: number): TradeDecision | null;
+  onTick(tick: DerivTick, balance: number, buyIn: number, openTrades: number): TradeDecision | null;
 
   /** Reset internal state (for new game rounds) */
   reset(): void;
@@ -39,26 +42,29 @@ export interface BotStrategyInstance {
 // ============================================================
 
 export interface TrendFollowerParams {
-  shortWindow: number;   // Short EMA period (default: 5)
-  longWindow: number;    // Long EMA period (default: 15)
-  stakePercent: number;  // Fraction of balance to stake (default: 0.06)
-  cooldownTicks: number; // Min ticks between trades (default: 8)
-  minTicks: number;      // Min ticks before first trade (default: 15)
+  shortWindow: number;         // Short EMA period (default: 5)
+  longWindow: number;          // Long EMA period (default: 15)
+  stakePercent: number;        // Fraction of balance to stake (default: 0.06)
+  cooldownTicks: number;       // Min ticks between signal checks (default: 8) — NOT trade resolution wait
+  minTicks: number;            // Min ticks before first trade (default: 15)
+  maxConcurrentTrades: number; // Max simultaneously open trades (default: 2)
 }
 
 export interface MeanReverterParams {
-  window: number;           // Rolling window for mean + σ (default: 20)
-  bandMultiplier: number;   // σ multiplier for Bollinger Bands (default: 2.0)
-  stakePercent: number;     // Fraction of balance to stake (default: 0.10)
-  cooldownTicks: number;    // Min ticks between trades (default: 6)
-  minTicks: number;         // Min ticks before first trade (default: 20)
+  window: number;              // Rolling window for mean + σ (default: 20)
+  bandMultiplier: number;      // σ multiplier for Bollinger Bands (default: 2.0)
+  stakePercent: number;        // Fraction of balance to stake (default: 0.10)
+  cooldownTicks: number;       // Min ticks between signal checks (default: 6) — NOT trade resolution wait
+  minTicks: number;            // Min ticks before first trade (default: 20)
+  maxConcurrentTrades: number; // Max simultaneously open trades (default: 2)
 }
 
 export interface HighFreqGamblerParams {
-  tradeInterval: number;   // Trade every N ticks (default: 4)
-  stakePercent: number;    // Fraction of balance per trade (default: 0.04)
-  momentumBias: number;    // Probability of following last tick direction (default: 0.65)
-  minTicks: number;        // Min ticks before first trade (default: 3)
+  tradeInterval: number;       // Min ticks between signal checks (default: 4) — NOT trade resolution wait
+  stakePercent: number;        // Fraction of balance per trade (default: 0.04)
+  momentumBias: number;        // Probability of following last tick direction (default: 0.65)
+  minTicks: number;            // Min ticks before first trade (default: 3)
+  maxConcurrentTrades: number; // Max simultaneously open trades (default: 4)
 }
 
 // ============================================================
@@ -71,6 +77,7 @@ export const DEFAULT_TREND_FOLLOWER_PARAMS: TrendFollowerParams = {
   stakePercent: 0.06,
   cooldownTicks: 8,
   minTicks: 15,
+  maxConcurrentTrades: 2,
 };
 
 export const DEFAULT_MEAN_REVERTER_PARAMS: MeanReverterParams = {
@@ -79,6 +86,7 @@ export const DEFAULT_MEAN_REVERTER_PARAMS: MeanReverterParams = {
   stakePercent: 0.10,
   cooldownTicks: 6,
   minTicks: 20,
+  maxConcurrentTrades: 2,
 };
 
 export const DEFAULT_HIGH_FREQ_GAMBLER_PARAMS: HighFreqGamblerParams = {
@@ -86,6 +94,7 @@ export const DEFAULT_HIGH_FREQ_GAMBLER_PARAMS: HighFreqGamblerParams = {
   stakePercent: 0.04,
   momentumBias: 0.65,
   minTicks: 3,
+  maxConcurrentTrades: 4,
 };
 
 /** Trade duration in ticks — how many ticks until a trade resolves */

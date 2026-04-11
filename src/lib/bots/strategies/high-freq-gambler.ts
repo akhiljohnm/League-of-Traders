@@ -1,7 +1,7 @@
 import type { DerivTick } from "@/lib/types/deriv";
 import type { BotStrategyInstance, TradeDecision, HighFreqGamblerParams } from "../types";
 import { DEFAULT_HIGH_FREQ_GAMBLER_PARAMS, GAME_TOTAL_TICKS } from "../types";
-import { createBrain } from "../brain";
+import { createBrain, BRAIN_PARAMS } from "../brain";
 
 // ============================================================
 // The High-Frequency Gambler — HIGH RISK personality
@@ -27,67 +27,71 @@ export function createHighFreqGambler(
   return {
     name: "High-Freq Gambler",
 
-    onTick(tick: DerivTick, balance: number, buyIn: number): TradeDecision | null {
+    onTick(tick: DerivTick, balance: number, buyIn: number, openTrades: number): TradeDecision | null {
       totalTicks++;
       ticksSinceLastTrade++;
 
-      const signal = brain.process(tick);
+      const signal = brain.process(tick, balance, buyIn);
 
       // Wait for minimum tick history
-      if (totalTicks < config.minTicks || signal.warming) return null;
+      if (signal.warming) return null;
 
-      // Role-aware interval: rescue bots trade more frequently to recover
+      // Hard stop: near-bankruptcy
+      const minStake = buyIn * 0.005;
+      if (balance < buyIn * BRAIN_PARAMS.hardStopAt) return null;
+      if (balance < minStake * 2) return null;
+
       const isRescue = balance < buyIn;
+      const isAlpha = balance > buyIn;
+
+      // Role-aware interval
       const effectiveInterval = isRescue
         ? Math.max(2, config.tradeInterval - 1)
         : config.tradeInterval;
 
-      // Only trade at the configured interval
+      // Only check signal at the configured interval (signal frequency — not trade resolution)
       if (ticksSinceLastTrade < effectiveInterval) return null;
 
-      // Don't trade if balance is too low
-      const minStake = buyIn * 0.005;
-      if (balance < minStake * 2) return null;
+      // Cap concurrent exposure
+      if (openTrades >= config.maxConcurrentTrades) return null;
 
-      // Role-aware stake sizing
-      const ticksRemaining = GAME_TOTAL_TICKS - totalTicks;
-      const isAlpha = balance > buyIn;
-      const isLateGame = ticksRemaining < 60;
+      // Mid-game freeze: HFG slows down (reduced stake) rather than full stop —
+      // it still needs to hit the 5-trade quota and its personality is volume.
+      const midGameStakeMultiplier = signal.isMidGameFreeze ? 0.3 : 1.0;
 
-      let multiplier = 1.0;
-      if (isRescue) {
-        multiplier = 1.5;
-      } else if (isAlpha) {
-        multiplier = isLateGame ? 0.56 : 0.8;
-      }
+      // PERSONALITY: gambler — use adaptive threshold halved to stay aggressive,
+      // but respect the high-vol filter to avoid noise in wild markets.
+      const threshold = signal.adaptiveThreshold * 0.5;
 
-      const stake = Math.min(
-        Math.round(balance * config.stakePercent * multiplier * 100) / 100,
-        balance * 0.15
-      );
-      if (stake < minStake) return null;
-
-      // PERSONALITY: Trade on any signal, even weak ones.
-      // Use the brain's composite direction if signal exists,
-      // fall back to momentum for rapid-fire decisions.
       let direction: "UP" | "DOWN";
-
-      if (Math.abs(signal.composite) >= CONFIDENCE_THRESHOLD) {
+      if (Math.abs(signal.composite) >= threshold) {
         direction = signal.composite > 0 ? "UP" : "DOWN";
       } else if (signal.momentum !== 0) {
-        // Follow micro-momentum when composite is flat
         direction = signal.momentum > 0 ? "UP" : "DOWN";
       } else {
-        // No signal at all — coin flip (the gambler lives dangerously)
         direction = Math.random() < 0.5 ? "UP" : "DOWN";
       }
 
+      // Stake: use brain's suggested pct as base, modified by personality and role.
+      // HFG caps per-trade exposure lower than TF/MR to enable more concurrent trades.
+      const basePct = signal.suggestedStakePct > 0 ? signal.suggestedStakePct : config.stakePercent;
+      let multiplier = midGameStakeMultiplier;
+      if (isRescue) multiplier *= 1.3;
+      else if (isAlpha) multiplier *= 0.8;
+
+      const stake = Math.min(
+        Math.round(balance * basePct * multiplier * 100) / 100,
+        balance * 0.20   // HFG hard cap: never bet > 20% on a single trade
+      );
+      if (stake < minStake) return null;
+
       ticksSinceLastTrade = 0;
       tradesPlaced++;
+      const phase = signal.isLateGame ? "LATE" : signal.isMidGameFreeze ? "MID-FREEZE" : "normal";
       console.log(
-        `[HFG] Trade #${tradesPlaced}: ${direction} $${stake.toFixed(2)} @ ${tick.quote.toFixed(2)} (signal=${signal.composite.toFixed(3)}, ${isRescue ? "RESCUE" : isAlpha ? "ALPHA" : "EVEN"})`
+        `[HFG] Trade #${tradesPlaced} [${phase}]: ${direction} $${stake.toFixed(2)} @ ${tick.quote.toFixed(2)} (signal=${signal.composite.toFixed(3)}, vol=${signal.relVol.toFixed(5)}, ${isRescue ? "RESCUE" : isAlpha ? "ALPHA" : "EVEN"}, open=${openTrades + 1}) dur=${signal.suggestedDuration}`
       );
-      return { direction, stake };
+      return { direction, stake, duration: signal.suggestedDuration };
     },
 
     reset() {

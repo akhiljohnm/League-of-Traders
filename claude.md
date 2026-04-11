@@ -40,6 +40,7 @@ All trades in the game use the **Rise/Fall** contract type, simulated locally:
 * **Payout:** Win = `stake × 1.954` (e.g., $10 bet → $19.54 return). Loss = forfeit the entire stake.
 * **Win Condition:** If direction is UP, win when `exit_price > entry_price`. If direction is DOWN, win when `exit_price < entry_price`. Exact same price = loss (no movement = no win).
 * **Simulation:** We do NOT use Deriv's proposal/buy/sell contract APIs. We use Deriv only as a Price Oracle for live tick data. Trade placement, resolution, and payout math are all handled by our own `src/lib/game/rise-fall.ts` module.
+* **Concurrent Positions:** A player or bot does NOT need to wait for an open contract to resolve before placing a new one. Multiple contracts can be live simultaneously. Stake is deducted immediately on placement; payout is credited at resolution. Bot strategies use a `maxConcurrentTrades` cap to limit simultaneous exposure, and a `cooldownTicks` to control signal frequency independently of trade resolution.
 
 ### 🧠 The 80/20 Payout Engine (CRITICAL MATH)
 When the 5-minute timer ends, the game calculates payouts based on the **Profit Contribution Model**:
