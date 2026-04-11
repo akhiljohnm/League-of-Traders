@@ -31,8 +31,9 @@ const PARAMS = {
   // Trade Management
   contractDuration: 4,       // Ticks per contract
   stakePercent: 0.14,        // Fraction of balance per trade
-  cooldownTicks: 4,          // Min ticks between signal trades
-  minTicks: 8,               // Earlier start to generate more early trades
+  cooldownTicks: 3,          // Min ticks between signal trades
+  minTicks: 15,              // Warmup period before first trade
+  minPrevGapFraction: 0.0001, // Require prev EMA gap >= this fraction before trading (filters tiny whipsaws)
 
   // Higher threshold = only very strong signals
   compositeThreshold: 0.6,   // Very strict: requires EMA + momentum alignment
@@ -70,7 +71,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd4 minT8 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 prevGap0.0001 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -102,12 +103,16 @@ export function createStrategy(): StrategyInstance {
       let reversionSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover
+      // 1. EMA Crossover + previous gap filter (require meaningful separation before crossover)
       if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
-        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
-        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
+        const prevGapFraction = Math.abs(prevDiff) / prevLongEMA;
+        // Only trade if the EMAs were separated by at least minPrevGapFraction BEFORE crossing
+        if (prevGapFraction >= PARAMS.minPrevGapFraction) {
+          if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
+          else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
+        }
       }
 
       // 2. Bollinger Bands
