@@ -28,7 +28,7 @@ const PARAMS = {
   bbWindow: 20,             // Rolling window for mean + stddev
   bbMultiplier: 1.80,       // Stddev multiplier for low-vol markets
   bbMultiplierHigh: 1.90,   // Stddev multiplier for high-vol markets
-  bbVolThreshold: 0.00005,  // RelVol above this = use high multiplier
+  bbVolThreshold: 0,         // Always use bbMultiplierHigh (low mult is dead code)
 
   // Trade Management
   contractDuration: 4,      // Ticks per contract. Allowed: 1,2,3,4,5,6,8,10
