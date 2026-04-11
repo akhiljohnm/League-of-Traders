@@ -37,8 +37,8 @@ const PARAMS = {
   cooldownTicks: 3,          // Min ticks between signal trades
   minTicks: 15,              // Warmup period before first trade
 
-  // Threshold 0.3: allows Donchian(0.3)+momentum(0.2)=0.5 and EMA(0.5)+momentum(0.2)=0.7
-  compositeThreshold: 0.3,
+  // Only trade breakouts when EMA trend agrees
+  compositeThreshold: 0.6,
 };
 
 // ============================================================
@@ -73,7 +73,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 + Donchian5 breakout thresh0.3 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 + Donchian5 breakout thresh0.6 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
