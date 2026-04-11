@@ -34,7 +34,7 @@ const PARAMS = {
   contractDuration: 4,      // Ticks per contract. Allowed: 1,2,3,4,5,6,8,10
   stakePercent: 0.45,       // Fraction of balance per trade
   lateGameMultiplier: 2.25, // Stake boost in final 60 ticks when winning
-  lateGameTick: 228,        // Tick threshold for late-game boost
+  lateGameTick: 232,        // Tick threshold for late-game boost
   cooldownTicks: 5,         // Min ticks between signal trades
   minTicks: 8,              // Warmup period before first trade
 
