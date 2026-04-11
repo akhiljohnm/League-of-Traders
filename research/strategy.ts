@@ -57,6 +57,8 @@ export function createStrategy(): StrategyInstance {
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
   let totalTicks = 0;
+  let lastCrossoverSignal = 0;      // 1 = bullish, -1 = bearish, 0 = none
+  let ticksSinceCrossover = 999;    // ticks since last crossover
 
   function getMean(): number {
     const window = priceHistory.slice(-PARAMS.bbWindow);
@@ -70,7 +72,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14-fixed dur4",
+    name: "AutoResearch EMA 8/21 1tick-persist BB3.0 thresh0.6 cd3 s14-fixed dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -102,12 +104,22 @@ export function createStrategy(): StrategyInstance {
       let reversionSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover
+      // 1. EMA Crossover + 1-tick persistence window
+      ticksSinceCrossover++;
       if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
-        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
-        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
+        if (prevDiff <= 0 && currDiff > 0) {
+          lastCrossoverSignal = 1;
+          ticksSinceCrossover = 0;
+        } else if (prevDiff >= 0 && currDiff < 0) {
+          lastCrossoverSignal = -1;
+          ticksSinceCrossover = 0;
+        }
+      }
+      // Allow crossover signal to persist for 1 tick after crossing
+      if (ticksSinceCrossover <= 1 && lastCrossoverSignal !== 0) {
+        trendSignal = lastCrossoverSignal;
       }
 
       // 2. Bollinger Bands
@@ -150,6 +162,8 @@ export function createStrategy(): StrategyInstance {
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
       totalTicks = 0;
+      lastCrossoverSignal = 0;
+      ticksSinceCrossover = 999;
     },
   };
 }
