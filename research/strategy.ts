@@ -70,7 +70,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 longSlope cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -102,15 +102,12 @@ export function createStrategy(): StrategyInstance {
       let reversionSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover + Long EMA slope confirmation
-      // Only trade crossover when the long EMA is ALSO sloping in the same direction
-      // This filters whipsaw crossovers in choppy/ranging markets
+      // 1. EMA Crossover
       if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
-        const longEMASlope = longEMA - prevLongEMA; // positive = uptrending, negative = downtrending
-        if (prevDiff <= 0 && currDiff > 0 && longEMASlope >= 0) trendSignal = 1.0;
-        else if (prevDiff >= 0 && currDiff < 0 && longEMASlope <= 0) trendSignal = -1.0;
+        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
+        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
       }
 
       // 2. Bollinger Bands
