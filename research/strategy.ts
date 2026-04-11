@@ -26,9 +26,7 @@ const PARAMS = {
 
   // Bollinger Bands (Mean Reversion)
   bbWindow: 20,             // Rolling window for mean + stddev
-  bbMultiplier: 1.80,       // Stddev multiplier for low-vol markets
-  bbMultiplierHigh: 1.90,   // Stddev multiplier for high-vol markets
-  bbVolThreshold: 0,         // Always use bbMultiplierHigh (low mult is dead code)
+  bbMultiplier: 1.90,       // Stddev multiplier for BB bands
 
   // Trade Management
   contractDuration: 4,      // Ticks per contract. Allowed: 1,2,3,4,5,6,8,10
@@ -138,7 +136,7 @@ export function createStrategy(): StrategyInstance {
         relVol = stdDev / mean;
 
         if (stdDev > mean * PARAMS.flatMarketThreshold) {
-          const mult = relVol > PARAMS.bbVolThreshold ? PARAMS.bbMultiplierHigh : PARAMS.bbMultiplier;
+          const mult = PARAMS.bbMultiplier;
           const upperBand = mean + mult * stdDev;
           const lowerBand = mean - mult * stdDev;
 
