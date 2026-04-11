@@ -30,7 +30,9 @@ const PARAMS = {
 
   // Trade Management
   contractDuration: 4,       // Ticks per contract
-  stakePercent: 0.14,        // Fraction of balance per trade
+  stakePercent: 0.14,        // Fraction of balance per trade when healthy
+  stakePercentDD: 0.09,      // Reduced stake when balance drops below ddThreshold
+  ddThreshold: 0.90,         // Switch to smaller stake if balance < buyIn * ddThreshold
   cooldownTicks: 3,          // Min ticks between signal trades (lower to get more trades)
   minTicks: 15,              // Warmup period before first trade
 
@@ -70,7 +72,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 ddProtect90pct cd3 s14/9 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -133,7 +135,9 @@ export function createStrategy(): StrategyInstance {
       if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
-      const stakeAmt = Math.round(balance * PARAMS.stakePercent * 100) / 100;
+      // Drawdown protection: reduce stake when in drawdown
+      const stakeRate = balance < buyIn * PARAMS.ddThreshold ? PARAMS.stakePercentDD : PARAMS.stakePercent;
+      const stakeAmt = Math.round(balance * stakeRate * 100) / 100;
       if (stakeAmt < minStake) return null;
 
       ticksSinceLastTrade = 0;
