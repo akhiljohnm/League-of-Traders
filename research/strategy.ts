@@ -105,8 +105,9 @@ export function createStrategy(): StrategyInstance {
       // Warmup
       if (totalTicks < PARAMS.minTicks) return null;
 
-      // Minimum stake check
+      // Minimum stake check / hard stop at 10% balance
       const minStake = buyIn * 0.01;
+      if (balance < buyIn * 0.10) return null;
       if (balance < minStake * 2) return null;
 
       // ---- Cooldown check (adaptive: longer in losing regime) ----
