@@ -20,26 +20,22 @@ import type { Tick, TradeDecision, StrategyInstance } from "./types";
 // ============================================================
 
 const PARAMS = {
-  // Primary EMA Crossover (Trend Following — the trade trigger)
+  // EMA Crossover (Trend Following)
   shortWindow: 8,            // Short EMA period
   longWindow: 21,            // Long EMA period
 
-  // Confirming EMA (must already be aligned in same direction)
-  confirmShortWindow: 5,     // Fast confirming EMA pair short
-  confirmLongWindow: 13,     // Fast confirming EMA pair long
-
-  // Bollinger Bands (Mean Reversion — disabled at 3.0)
-  bbWindow: 20,
-  bbMultiplier: 3.0,
+  // Bollinger Bands (Mean Reversion)
+  bbWindow: 20,              // Rolling window for mean + stddev
+  bbMultiplier: 3.0,         // Stddev multiplier for BB bands
 
   // Trade Management
   contractDuration: 4,       // Ticks per contract
   stakePercent: 0.14,        // Fraction of balance per trade
-  cooldownTicks: 3,          // Min ticks between signal trades
+  cooldownTicks: 3,          // Min ticks between signal trades (lower to get more trades)
   minTicks: 15,              // Warmup period before first trade
 
   // Higher threshold = only very strong signals
-  compositeThreshold: 0.6,   // Requires EMA crossover + momentum + fast EMA already aligned
+  compositeThreshold: 0.6,   // Very strict: requires EMA + momentum alignment
 };
 
 // ============================================================
@@ -57,9 +53,6 @@ export function createStrategy(): StrategyInstance {
   let longEMA: number | null = null;
   let prevShortEMA: number | null = null;
   let prevLongEMA: number | null = null;
-  // Fast confirming EMA pair
-  let confirmShortEMA: number | null = null;
-  let confirmLongEMA: number | null = null;
   let priceHistory: number[] = [];
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
@@ -77,7 +70,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 + fast5/13 confirm thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -93,8 +86,6 @@ export function createStrategy(): StrategyInstance {
       prevLongEMA = longEMA;
       shortEMA = updateEMA(shortEMA, price, PARAMS.shortWindow);
       longEMA = updateEMA(longEMA, price, PARAMS.longWindow);
-      confirmShortEMA = updateEMA(confirmShortEMA, price, PARAMS.confirmShortWindow);
-      confirmLongEMA = updateEMA(confirmLongEMA, price, PARAMS.confirmLongWindow);
 
       const prevPrice = lastPrice;
       lastPrice = price;
@@ -111,16 +102,12 @@ export function createStrategy(): StrategyInstance {
       let reversionSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover (8/21) confirmed by fast EMA (5/13) already in same direction
-      if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null &&
-          confirmShortEMA !== null && confirmLongEMA !== null) {
+      // 1. EMA Crossover
+      if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
-        const fastDiff = confirmShortEMA - confirmLongEMA;
-        // Fast EMA must ALREADY be positive (bullish) when slow EMA crosses up
-        if (prevDiff <= 0 && currDiff > 0 && fastDiff > 0) trendSignal = 1.0;
-        // Fast EMA must ALREADY be negative (bearish) when slow EMA crosses down
-        else if (prevDiff >= 0 && currDiff < 0 && fastDiff < 0) trendSignal = -1.0;
+        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
+        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
       }
 
       // 2. Bollinger Bands
@@ -158,8 +145,6 @@ export function createStrategy(): StrategyInstance {
       longEMA = null;
       prevShortEMA = null;
       prevLongEMA = null;
-      confirmShortEMA = null;
-      confirmLongEMA = null;
       priceHistory = [];
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
