@@ -37,11 +37,6 @@ const PARAMS = {
   cooldownTicks: 5,         // Min ticks between signal trades
   minTicks: 8,              // Warmup period before first trade
 
-  // Signal Weights (how to blend indicators)
-  trendWeight: 0.5,         // Weight for EMA crossover signal
-  reversionWeight: 0.3,     // Weight for Bollinger Band signal
-  momentumWeight: 0.2,      // Weight for micro-momentum signal
-
   // Regime Detection
   flatMarketThreshold: 0.00030, // Below this relative stddev, skip trading
   lateGameThreshold: 0.70,  // Higher quality filter for all-in late game trades
@@ -163,11 +158,8 @@ export function createStrategy(): StrategyInstance {
         momentumSignal = price > prevPrice ? 1.0 : -1.0;
       }
 
-      // ---- Blend signals ----
-      const composite =
-        trendSignal * PARAMS.trendWeight +
-        reversionSignal * PARAMS.reversionWeight +
-        momentumSignal * PARAMS.momentumWeight;
+      // ---- Blend signals (0.5 trend + 0.3 reversion + 0.2 momentum) ----
+      const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
 
       // Only trade if composite signal is strong enough
       const isLateGame = totalTicks >= PARAMS.lateGameTick && balance > buyIn;
