@@ -22,7 +22,7 @@ import type { Tick, TradeDecision, StrategyInstance } from "./types";
 const PARAMS = {
   // EMA Crossover (Trend Following)
   shortWindow: 8,           // Short EMA period
-  longWindow: 21,           // Long EMA period
+  longWindow: 18,           // Long EMA period
 
   // Bollinger Bands (Mean Reversion)
   bbWindow: 20,             // Rolling window for mean + stddev
