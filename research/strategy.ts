@@ -53,8 +53,6 @@ export function createStrategy(): StrategyInstance {
   let longEMA: number | null = null;
   let prevShortEMA: number | null = null;
   let prevLongEMA: number | null = null;
-  let prevPrevShortEMA: number | null = null;
-  let prevPrevLongEMA: number | null = null;
   let priceHistory: number[] = [];
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
@@ -72,7 +70,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 divFilter cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -84,8 +82,6 @@ export function createStrategy(): StrategyInstance {
         priceHistory = priceHistory.slice(-PARAMS.bbWindow * 2);
       }
 
-      prevPrevShortEMA = prevShortEMA;
-      prevPrevLongEMA = prevLongEMA;
       prevShortEMA = shortEMA;
       prevLongEMA = longEMA;
       shortEMA = updateEMA(shortEMA, price, PARAMS.shortWindow);
@@ -106,26 +102,12 @@ export function createStrategy(): StrategyInstance {
       let reversionSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover + Separation Acceleration Filter
-      // Only fire if the EMAs are diverging after the crossover (momentum confirmed)
-      if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null &&
-          prevPrevShortEMA !== null && prevPrevLongEMA !== null) {
+      // 1. EMA Crossover
+      if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
-        const prevPrevDiff = prevPrevShortEMA - prevPrevLongEMA;
-        // Crossover: sign changed
-        if (prevDiff <= 0 && currDiff > 0) {
-          // After bullish crossover: EMAs must be diverging (separation growing)
-          if (Math.abs(currDiff) >= Math.abs(prevDiff)) trendSignal = 1.0;
-        } else if (prevDiff >= 0 && currDiff < 0) {
-          // After bearish crossover: EMAs must be diverging
-          if (Math.abs(currDiff) >= Math.abs(prevDiff)) trendSignal = -1.0;
-        } else if (prevPrevDiff <= 0 && prevDiff > 0) {
-          // Crossover happened last tick — still diverging?
-          if (Math.abs(currDiff) > Math.abs(prevDiff)) trendSignal = 1.0;
-        } else if (prevPrevDiff >= 0 && prevDiff < 0) {
-          if (Math.abs(currDiff) > Math.abs(prevDiff)) trendSignal = -1.0;
-        }
+        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
+        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
       }
 
       // 2. Bollinger Bands
@@ -163,8 +145,6 @@ export function createStrategy(): StrategyInstance {
       longEMA = null;
       prevShortEMA = null;
       prevLongEMA = null;
-      prevPrevShortEMA = null;
-      prevPrevLongEMA = null;
       priceHistory = [];
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
