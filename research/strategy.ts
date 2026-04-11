@@ -33,7 +33,6 @@ const PARAMS = {
   // Trade Management
   contractDuration: 4,      // Ticks per contract. Allowed: 1,2,3,4,5,6,8,10
   stakePercent: 0.45,       // Fraction of balance per trade
-  lateGameMultiplier: 2.25, // Stake boost in final 60 ticks when winning
   lateGameTick: 234,        // Tick threshold for late-game boost
   cooldownTicks: 5,         // Min ticks between signal trades
   minTicks: 8,              // Warmup period before first trade
@@ -186,8 +185,9 @@ export function createStrategy(): StrategyInstance {
       const bankruptcyFactor = balance < buyIn * 0.34 ? 0.10 : 1.0;
       // High-vol markets (1HZ100V) get 75% stake to reduce noise losses
       const highVolFactor = relVol > PARAMS.bbVolThreshold ? 0.75 : 1.0;
+      // Late game: all-in (0.45×2.25=1.0125 always clips to 100% balance)
       const stakeAmt = Math.round(
-        balance * (isLateGame ? PARAMS.stakePercent * PARAMS.lateGameMultiplier : PARAMS.stakePercent * bankruptcyFactor * highVolFactor) * 100
+        balance * (isLateGame ? 1.0 : PARAMS.stakePercent * bankruptcyFactor * highVolFactor) * 100
       ) / 100;
       if (stakeAmt < minStake) return null;
 
