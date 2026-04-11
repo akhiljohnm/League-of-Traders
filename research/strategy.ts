@@ -181,7 +181,7 @@ export function createStrategy(): StrategyInstance {
       // High-vol markets (1HZ100V) get 75% stake to reduce noise losses
       const highVolFactor = relVol > PARAMS.bbVolThreshold ? 0.75 : 1.0;
       // Mid-game (ticks 100-234): reduced stake to protect balance for late game
-      const midGameFactor = (!isLateGame && totalTicks >= 130) ? 0.02 : 1.0;
+      const midGameFactor = (!isLateGame && totalTicks >= 132) ? 0.02 : 1.0;
       // Late game: all-in (0.45×2.25=1.0125 always clips to 100% balance)
       const stakeAmt = Math.round(
         balance * (isLateGame ? 1.0 : PARAMS.stakePercent * bankruptcyFactor * highVolFactor * midGameFactor) * 100
