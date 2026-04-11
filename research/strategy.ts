@@ -21,18 +21,21 @@ import type { Tick, TradeDecision, StrategyInstance } from "./types";
 
 const PARAMS = {
   // EMA Crossover (Trend Following)
-  shortWindow: 5,            // Short EMA period
-  longWindow: 15,            // Long EMA period
+  shortWindow: 8,            // Short EMA period
+  longWindow: 21,            // Long EMA period
 
   // Bollinger Bands (Mean Reversion)
   bbWindow: 20,              // Rolling window for mean + stddev
-  bbMultiplier: 2.0,         // Stddev multiplier for BB bands
+  bbMultiplier: 2.3,         // Stddev multiplier for BB bands
 
   // Trade Management
-  contractDuration: 5,       // Ticks per contract. Allowed: 1,2,3,4,5,6,8,10
-  stakePercent: 0.05,        // Fraction of balance per trade
-  cooldownTicks: 5,          // Min ticks between signal trades
-  minTicks: 20,              // Warmup period before first trade
+  contractDuration: 4,       // Ticks per contract
+  stakePercent: 0.07,        // Fraction of balance per trade
+  cooldownTicks: 3,          // Min ticks between signal trades (lower to get more trades)
+  minTicks: 15,              // Warmup period before first trade
+
+  // Higher threshold = only very strong signals
+  compositeThreshold: 0.5,   // Strict signal filter
 };
 
 // ============================================================
@@ -67,7 +70,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch Baseline v1",
+    name: "AutoResearch EMA 8/21 BB2.3 thresh0.5 cd3 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -127,7 +130,7 @@ export function createStrategy(): StrategyInstance {
       // Blend: 0.5 trend + 0.3 reversion + 0.2 momentum
       const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
 
-      if (Math.abs(composite) < 0.25) return null;
+      if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
       const stakeAmt = Math.round(balance * PARAMS.stakePercent * 100) / 100;
