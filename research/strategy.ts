@@ -176,13 +176,15 @@ export function createStrategy(): StrategyInstance {
       if (Math.abs(composite) < signalThreshold) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
-      // Soft floor: emergency brake at <34% balance to prevent total bankruptcy
+      // Soft floor: emergency brake at <50% balance to prevent total bankruptcy
       const bankruptcyFactor = balance < buyIn * 0.50 ? 0.10 : 1.0;
       // High-vol markets (1HZ100V) get 75% stake to reduce noise losses
       const highVolFactor = relVol > PARAMS.bbVolThreshold ? 0.75 : 1.0;
+      // Mid-game (ticks 100-234): slightly reduced stake to protect balance for late game
+      const midGameFactor = (!isLateGame && totalTicks >= 100) ? 0.90 : 1.0;
       // Late game: all-in (0.45×2.25=1.0125 always clips to 100% balance)
       const stakeAmt = Math.round(
-        balance * (isLateGame ? 1.0 : PARAMS.stakePercent * bankruptcyFactor * highVolFactor) * 100
+        balance * (isLateGame ? 1.0 : PARAMS.stakePercent * bankruptcyFactor * highVolFactor * midGameFactor) * 100
       ) / 100;
       if (stakeAmt < minStake) return null;
 
