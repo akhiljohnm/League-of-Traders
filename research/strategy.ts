@@ -57,6 +57,9 @@ export function createStrategy(): StrategyInstance {
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
   let totalTicks = 0;
+  // Post-crossover confirmation state
+  let pendingCrossoverDir: 1 | -1 | 0 = 0;  // direction of last crossover
+  let pendingCrossoverGap: number = 0;        // gap magnitude at crossover tick
 
   function getMean(): number {
     const window = priceHistory.slice(-PARAMS.bbWindow);
@@ -70,7 +73,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 xoverConfirm cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -102,12 +105,33 @@ export function createStrategy(): StrategyInstance {
       let reversionSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover
+      // 1. EMA Crossover with 1-tick confirmation delay
+      // On crossover tick: record the event and direction.
+      // On the NEXT tick: check if gap has GROWN (trend confirmed), then signal.
+      // This avoids trading on reverting crossovers.
       if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
-        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
-        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
+
+        // Check if there's a pending crossover from last tick that needs confirmation
+        if (pendingCrossoverDir !== 0) {
+          const gapNow = Math.abs(currDiff);
+          if (gapNow > pendingCrossoverGap) {
+            // Gap grew — trend confirmed, fire signal
+            trendSignal = pendingCrossoverDir;
+          }
+              pendingCrossoverDir = 0;
+          pendingCrossoverGap = 0;
+        }
+
+        // Detect fresh crossover on this tick (defer to next tick for confirmation)
+        if (prevDiff <= 0 && currDiff > 0) {
+          pendingCrossoverDir = 1;
+          pendingCrossoverGap = Math.abs(currDiff);
+        } else if (prevDiff >= 0 && currDiff < 0) {
+          pendingCrossoverDir = -1;
+          pendingCrossoverGap = Math.abs(currDiff);
+        }
       }
 
       // 2. Bollinger Bands
@@ -149,6 +173,8 @@ export function createStrategy(): StrategyInstance {
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
       totalTicks = 0;
+      pendingCrossoverDir = 0;
+      pendingCrossoverGap = 0;
     },
   };
 }
