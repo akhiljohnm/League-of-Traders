@@ -108,16 +108,19 @@ export function createStrategy(): StrategyInstance {
       let reversionSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover — track ALL crossovers (for recency filter) + generate signal
+      // 1. EMA Crossover — only fire if previous crossover was >= minTicksSinceCrossover ago
       if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
-        if (prevDiff <= 0 && currDiff > 0) {
-          ticksSinceAnyCrossover = 0;  // reset crossover timer
-          trendSignal = 1.0;
-        } else if (prevDiff >= 0 && currDiff < 0) {
+        const isCrossover = (prevDiff <= 0 && currDiff > 0) || (prevDiff >= 0 && currDiff < 0);
+        if (isCrossover) {
+          // Only trade this crossover if the PREVIOUS one was far enough ago
+          if (ticksSinceAnyCrossover >= PARAMS.minTicksSinceCrossover) {
+            if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
+            else trendSignal = -1.0;
+          }
+          // Always reset the crossover timer, regardless of whether we trade
           ticksSinceAnyCrossover = 0;
-          trendSignal = -1.0;
         }
       }
 
@@ -142,10 +145,6 @@ export function createStrategy(): StrategyInstance {
       const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
 
       if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
-
-      // Crossover recency filter: if we've had a crossover too recently, skip
-      // (filters rapid whipsaw re-crossovers that immediately reverse)
-      if (ticksSinceAnyCrossover < PARAMS.minTicksSinceCrossover) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
       const stakeAmt = Math.round(balance * PARAMS.stakePercent * 100) / 100;
