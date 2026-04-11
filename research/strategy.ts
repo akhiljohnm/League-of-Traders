@@ -30,7 +30,7 @@ const PARAMS = {
 
   // Trade Management
   contractDuration: 4,       // Ticks per contract
-  stakePercent: 0.12,        // Fraction of balance per trade
+  stakePercent: 0.13,        // Fraction of balance per trade
   cooldownTicks: 3,          // Min ticks between signal trades (lower to get more trades)
   minTicks: 15,              // Warmup period before first trade
 
@@ -70,7 +70,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.5 cd3 s12 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.5 cd3 s13 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
