@@ -26,7 +26,7 @@ const PARAMS = {
 
   // Bollinger Bands (Mean Reversion)
   bbWindow: 20,              // Rolling window for mean + stddev
-  bbMultiplier: 2.7,         // Stddev multiplier for BB bands
+  bbMultiplier: 3.0,         // Stddev multiplier for BB bands
 
   // Trade Management
   contractDuration: 4,       // Ticks per contract
@@ -70,7 +70,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB2.7 thresh0.5 cd3 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.5 cd3 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
