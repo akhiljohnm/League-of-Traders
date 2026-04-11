@@ -161,7 +161,7 @@ export function createStrategy(): StrategyInstance {
       const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
 
       // Only trade if composite signal is strong enough
-      const isLateGame = totalTicks >= PARAMS.lateGameTick && balance > buyIn * 0.90;
+      const isLateGame = totalTicks >= PARAMS.lateGameTick;
       // Adaptive threshold: lower when winning
       let regularThreshold = 0.25;
       if (balanceHistory.length >= 15) {
