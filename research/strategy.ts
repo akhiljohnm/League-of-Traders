@@ -26,7 +26,7 @@ const PARAMS = {
 
   // Bollinger Bands (Mean Reversion)
   bbWindow: 20,              // Rolling window for mean + stddev
-  bbMultiplier: 3.0,         // Stddev multiplier for BB bands
+  bbMultiplier: 1.8,         // Stddev multiplier for BB bands — more active reversion filter
 
   // RSI
   rsiWindow: 14,             // RSI period
@@ -89,7 +89,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/25 RSI+vel3 1tick-persist BB3.0 thresh0.6 cd3 s19 dur4",
+    name: "AutoResearch EMA 8/25 RSI+vel3 1tick-persist BB1.8 thresh0.6 cd3 s19 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
