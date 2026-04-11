@@ -68,6 +68,7 @@ export function createStrategy(): StrategyInstance {
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
   let totalTicks = 0;
+  let balanceHistory: number[] = [];  // last 15 ticks for adaptive threshold
 
   // ---- Bollinger Band helpers ----
   function getMean(): number {
@@ -103,6 +104,10 @@ export function createStrategy(): StrategyInstance {
 
       const prevPrice = lastPrice;
       lastPrice = price;
+
+      // Track balance for adaptive threshold
+      balanceHistory.push(balance);
+      if (balanceHistory.length > 15) balanceHistory.shift();
 
       // Warmup
       if (totalTicks < PARAMS.minTicks) return null;
@@ -163,7 +168,14 @@ export function createStrategy(): StrategyInstance {
 
       // Only trade if composite signal is strong enough
       const isLateGame = totalTicks >= PARAMS.lateGameTick && balance > buyIn;
-      const signalThreshold = isLateGame ? PARAMS.lateGameThreshold : 0.25;
+      // Adaptive threshold: lower when winning (more signals), raise when losing (fewer)
+      let regularThreshold = 0.25;
+      if (balanceHistory.length >= 15) {
+        const recentTrend = (balance - balanceHistory[0]) / balanceHistory[0];
+        if (recentTrend > 0.05) regularThreshold = 0.20;       // winning regime → more trades
+        else if (recentTrend < -0.03) regularThreshold = 0.35; // losing regime → fewer trades
+      }
+      const signalThreshold = isLateGame ? PARAMS.lateGameThreshold : regularThreshold;
       if (Math.abs(composite) < signalThreshold) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
@@ -188,6 +200,7 @@ export function createStrategy(): StrategyInstance {
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
       totalTicks = 0;
+      balanceHistory = [];
     },
   };
 }
