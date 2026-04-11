@@ -23,6 +23,7 @@ const PARAMS = {
   // EMA Crossover (Trend Following)
   shortWindow: 8,            // Short EMA period
   longWindow: 21,            // Long EMA period
+  emaGapMin: 0.0001,         // Min EMA gap as fraction of price to trade (filters tiny crossovers)
 
   // Bollinger Bands (Mean Reversion)
   bbWindow: 20,              // Rolling window for mean + stddev
@@ -70,7 +71,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 gapFilter0.0001 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -102,12 +103,15 @@ export function createStrategy(): StrategyInstance {
       let reversionSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover
+      // 1. EMA Crossover + Gap filter (avoid tiny/noisy crossovers)
       if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
-        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
-        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
+        const gapFraction = Math.abs(currDiff) / longEMA;
+        if (gapFraction >= PARAMS.emaGapMin) {
+          if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
+          else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
+        }
       }
 
       // 2. Bollinger Bands
