@@ -62,6 +62,7 @@ export function createStrategy(): StrategyInstance {
   let totalTicks = 0;
   let lastCrossoverSignal = 0;      // 1 = bullish, -1 = bearish, 0 = none
   let ticksSinceCrossover = 999;    // ticks since last crossover
+  let prevEMAGap: number | null = null;   // previous EMA gap for velocity calc
 
   // RSI state
   let avgGain: number | null = null;
@@ -86,7 +87,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/25 RSI14-confirm 1tick-persist BB3.0 thresh0.6 cd3 s17 dur4",
+    name: "AutoResearch EMA 8/25 RSI+velocity 1tick-persist BB3.0 thresh0.6 cd3 s17 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -126,6 +127,7 @@ export function createStrategy(): StrategyInstance {
       let trendSignal = 0;
       let reversionSignal = 0;
       let momentumSignal = 0;
+      let velocitySignal = 0;   // EMA gap acceleration
 
       // 1. EMA Crossover + 1-tick persistence window (gated by RSI direction)
       ticksSinceCrossover++;
@@ -168,8 +170,17 @@ export function createStrategy(): StrategyInstance {
         momentumSignal = price > prevPrice ? 1.0 : -1.0;
       }
 
-      // Blend: 0.5 trend + 0.3 reversion + 0.2 momentum
-      const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
+      // 4. EMA Gap Velocity (is the trend accelerating?)
+      if (shortEMA !== null && longEMA !== null) {
+        const emaGap = shortEMA - longEMA;
+        if (prevEMAGap !== null && emaGap !== prevEMAGap) {
+          velocitySignal = emaGap > prevEMAGap ? 1.0 : -1.0;
+        }
+        prevEMAGap = emaGap;
+      }
+
+      // Blend: 0.4 trend + 0.2 reversion + 0.2 momentum + 0.2 velocity (threshold=0.6)
+      const composite = trendSignal * 0.4 + reversionSignal * 0.2 + momentumSignal * 0.2 + velocitySignal * 0.2;
 
       if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
 
@@ -195,6 +206,7 @@ export function createStrategy(): StrategyInstance {
       ticksSinceCrossover = 999;
       avgGain = null;
       avgLoss = null;
+      prevEMAGap = null;
     },
   };
 }
