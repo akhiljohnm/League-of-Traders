@@ -33,7 +33,7 @@ const PARAMS = {
   stakePercent: 0.14,        // Fraction of balance per trade
   cooldownTicks: 3,          // Min ticks between signal trades
   minTicks: 15,              // Warmup period before first trade
-  minPrevGapFraction: 0.00001, // Require prev EMA gap >= this fraction before trading (filters tiny whipsaws)
+  minPrevGapFraction: 0.0001, // Require prev EMA gap >= this fraction before trading (filters tiny whipsaws)
 
   // Higher threshold = only very strong signals
   compositeThreshold: 0.6,   // Very strict: requires EMA + momentum alignment
@@ -71,7 +71,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 prevGap0.00001 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 prevGap0.0001 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
