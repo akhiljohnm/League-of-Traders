@@ -21,22 +21,18 @@ import type { Tick, TradeDecision, StrategyInstance } from "./types";
 
 const PARAMS = {
   // EMA Crossover (Trend Following)
-  shortWindow: 8,           // Short EMA period
-  longWindow: 18,           // Long EMA period
+  shortWindow: 5,            // Short EMA period
+  longWindow: 15,            // Long EMA period
 
   // Bollinger Bands (Mean Reversion)
-  bbWindow: 20,             // Rolling window for mean + stddev
-  bbMultiplier: 1.90,       // Stddev multiplier for BB bands
+  bbWindow: 20,              // Rolling window for mean + stddev
+  bbMultiplier: 2.0,         // Stddev multiplier for BB bands
 
   // Trade Management
-  contractDuration: 4,      // Ticks per contract. Allowed: 1,2,3,4,5,6,8,10
-  stakePercent: 0.625,      // Fraction of balance per trade
-  lateGameTick: 212,        // Tick threshold for late-game boost
-  cooldownTicks: 5,         // Min ticks between signal trades
-  minTicks: 8,              // Warmup period before first trade
-
-  // Regime Detection
-  flatMarketThreshold: 0.00025, // Below this relative stddev, skip trading
+  contractDuration: 5,       // Ticks per contract. Allowed: 1,2,3,4,5,6,8,10
+  stakePercent: 0.05,        // Fraction of balance per trade
+  cooldownTicks: 5,          // Min ticks between signal trades
+  minTicks: 20,              // Warmup period before first trade
 };
 
 // ============================================================
@@ -50,7 +46,6 @@ function updateEMA(current: number | null, price: number, period: number): numbe
 }
 
 export function createStrategy(): StrategyInstance {
-  // ---- Internal state ----
   let shortEMA: number | null = null;
   let longEMA: number | null = null;
   let prevShortEMA: number | null = null;
@@ -59,9 +54,7 @@ export function createStrategy(): StrategyInstance {
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
   let totalTicks = 0;
-  let balanceHistory: number[] = [];  // last 15 ticks for adaptive threshold
 
-  // ---- Bollinger Band helpers ----
   function getMean(): number {
     const window = priceHistory.slice(-PARAMS.bbWindow);
     return window.reduce((s, p) => s + p, 0) / window.length;
@@ -74,20 +67,18 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch Hybrid v12",
+    name: "AutoResearch Baseline v1",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
       totalTicks++;
       ticksSinceLastTrade++;
 
-      // Update price history
       priceHistory.push(price);
       if (priceHistory.length > PARAMS.bbWindow * 2) {
         priceHistory = priceHistory.slice(-PARAMS.bbWindow * 2);
       }
 
-      // Update EMAs
       prevShortEMA = shortEMA;
       prevLongEMA = longEMA;
       shortEMA = updateEMA(shortEMA, price, PARAMS.shortWindow);
@@ -96,55 +87,35 @@ export function createStrategy(): StrategyInstance {
       const prevPrice = lastPrice;
       lastPrice = price;
 
-      // Track balance for adaptive threshold
-      balanceHistory.push(balance);
-      if (balanceHistory.length > 15) balanceHistory.shift();
-
-      // Warmup
       if (totalTicks < PARAMS.minTicks) return null;
 
-      // Minimum stake check / hard stop at 10% balance
       const minStake = buyIn * 0.01;
-      if (balance < buyIn * 0.10) return null;
       if (balance < minStake * 2) return null;
 
-      // ---- Cooldown check ----
       if (ticksSinceLastTrade < PARAMS.cooldownTicks) return null;
 
-      // ---- Compute signals ----
-      let trendSignal = 0;  // -1 to +1
-      let reversionSignal = 0;  // -1 to +1
-      let momentumSignal = 0;  // -1 to +1
+      // ---- Signals ----
+      let trendSignal = 0;
+      let reversionSignal = 0;
+      let momentumSignal = 0;
 
-      // 1. EMA Crossover (Trend)
+      // 1. EMA Crossover
       if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
-
-        if (prevDiff <= 0 && currDiff > 0) {
-          trendSignal = 1.0; // Bullish crossover
-        } else if (prevDiff >= 0 && currDiff < 0) {
-          trendSignal = -1.0; // Bearish crossover
-        }
+        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
+        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
       }
 
-      // 2. Bollinger Bands (Mean Reversion)
-      let relVol = 0;
+      // 2. Bollinger Bands
       if (priceHistory.length >= PARAMS.bbWindow) {
         const mean = getMean();
         const stdDev = getStdDev(mean);
-        relVol = stdDev / mean;
-
-        if (stdDev > mean * PARAMS.flatMarketThreshold) {
-          const mult = PARAMS.bbMultiplier;
-          const upperBand = mean + mult * stdDev;
-          const lowerBand = mean - mult * stdDev;
-
-          if (price > upperBand) {
-            reversionSignal = -1.0; // Overbought → expect DOWN
-          } else if (price < lowerBand) {
-            reversionSignal = 1.0; // Oversold → expect UP
-          }
+        if (stdDev > 0) {
+          const upper = mean + PARAMS.bbMultiplier * stdDev;
+          const lower = mean - PARAMS.bbMultiplier * stdDev;
+          if (price > upper) reversionSignal = -1.0;
+          else if (price < lower) reversionSignal = 1.0;
         }
       }
 
@@ -153,37 +124,17 @@ export function createStrategy(): StrategyInstance {
         momentumSignal = price > prevPrice ? 1.0 : -1.0;
       }
 
-      // ---- Blend signals (0.5 trend + 0.3 reversion + 0.2 momentum) ----
+      // Blend: 0.5 trend + 0.3 reversion + 0.2 momentum
       const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
 
-      // Only trade if composite signal is strong enough
-      const isLateGame = totalTicks >= PARAMS.lateGameTick && relVol < 0.0002;
-      // Adaptive threshold: lower when winning
-      let regularThreshold = 0.25;
-      if (balanceHistory.length >= 15) {
-        const recentTrend = (balance - balanceHistory[0]) / balanceHistory[0];
-        if (recentTrend > 0.05) regularThreshold = 0.20;       // winning regime → more trades
-      }
-      // High-vol early game: require stronger signal (blocks pure BB reversion)
-      if (relVol > 0.0006) regularThreshold = Math.max(regularThreshold, 0.50);
-      else if (relVol > 0.0003) regularThreshold = Math.max(regularThreshold, 0.35);
-      // Late game requires strong signal: trend+momentum (0.70) or better
-      const signalThreshold = isLateGame ? 0.70 : regularThreshold;
-      if (Math.abs(composite) < signalThreshold) return null;
+      if (Math.abs(composite) < 0.25) return null;
 
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
-      // Soft floor: emergency brake at <50% balance to prevent total bankruptcy
-      const bankruptcyFactor = balance < buyIn * 0.50 ? 0.10 : 1.0;
-      // Mid-game freeze: stake=0 until late game
-      const midGameFactor = (!isLateGame && totalTicks >= 134) ? 0.0 : 1.0;
-      const stakeAmt = Math.round(
-        balance * (isLateGame ? 1.0 : PARAMS.stakePercent * bankruptcyFactor * midGameFactor) * 100
-      ) / 100;
+      const stakeAmt = Math.round(balance * PARAMS.stakePercent * 100) / 100;
       if (stakeAmt < minStake) return null;
 
-      const tradeDuration = PARAMS.contractDuration;
       ticksSinceLastTrade = 0;
-      return { direction, stake: stakeAmt, duration: tradeDuration };
+      return { direction, stake: stakeAmt, duration: PARAMS.contractDuration };
     },
 
     reset() {
@@ -195,7 +146,6 @@ export function createStrategy(): StrategyInstance {
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
       totalTicks = 0;
-      balanceHistory = [];
     },
   };
 }
