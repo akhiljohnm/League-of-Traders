@@ -24,22 +24,18 @@ const PARAMS = {
   shortWindow: 8,            // Short EMA period
   longWindow: 21,            // Long EMA period
 
-  // Bollinger Bands (Mean Reversion — disabled at 3.0)
-  bbWindow: 20,
-  bbMultiplier: 3.0,
+  // Bollinger Bands (Mean Reversion)
+  bbWindow: 20,              // Rolling window for mean + stddev
+  bbMultiplier: 3.0,         // Stddev multiplier for BB bands
 
   // Trade Management
   contractDuration: 4,       // Ticks per contract
   stakePercent: 0.14,        // Fraction of balance per trade
-  cooldownTicks: 3,          // Min ticks between signal trades
+  cooldownTicks: 3,          // Min ticks between signal trades (lower to get more trades)
   minTicks: 15,              // Warmup period before first trade
 
-  // Crossover recency filter: don't trade if the SAME crossover just happened <4 ticks ago
-  // This filters whipsaw re-crossovers while keeping cooldown=3 for trade spacing
-  minTicksSinceCrossover: 4, // Must wait this long after any crossover to trade
-
   // Higher threshold = only very strong signals
-  compositeThreshold: 0.6,   // Requires EMA + momentum alignment
+  compositeThreshold: 0.6,   // Very strict: requires EMA + momentum alignment
 };
 
 // ============================================================
@@ -60,8 +56,6 @@ export function createStrategy(): StrategyInstance {
   let priceHistory: number[] = [];
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
-  let ticksSinceLastCrossover = PARAMS.minTicksSinceCrossover; // starts ready
-  let lastCrossoverDir = 0; // 1=bullish, -1=bearish
   let totalTicks = 0;
 
   function getMean(): number {
@@ -76,13 +70,12 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 antiWhipsaw4 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
       totalTicks++;
       ticksSinceLastTrade++;
-      ticksSinceLastCrossover++;
 
       priceHistory.push(price);
       if (priceHistory.length > PARAMS.bbWindow * 2) {
@@ -109,26 +102,12 @@ export function createStrategy(): StrategyInstance {
       let reversionSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover — anti-whipsaw filter
-      // Skip a crossover only if the OPPOSITE direction crossover was < minTicksSinceCrossover ago
-      // (this targets whipsaws: UP then DOWN in < 4 ticks = fake breakout)
-      // Same-direction crossovers within 4 ticks are still allowed (continuation signal)
+      // 1. EMA Crossover
       if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
-        if (prevDiff <= 0 && currDiff > 0) {
-          // Bullish crossover: skip only if last crossover was bearish within minTicksSinceCrossover
-          const isWhipsaw = lastCrossoverDir === -1 && ticksSinceLastCrossover < PARAMS.minTicksSinceCrossover;
-          if (!isWhipsaw) trendSignal = 1.0;
-          ticksSinceLastCrossover = 0;
-          lastCrossoverDir = 1;
-        } else if (prevDiff >= 0 && currDiff < 0) {
-          // Bearish crossover: skip only if last crossover was bullish within minTicksSinceCrossover
-          const isWhipsaw = lastCrossoverDir === 1 && ticksSinceLastCrossover < PARAMS.minTicksSinceCrossover;
-          if (!isWhipsaw) trendSignal = -1.0;
-          ticksSinceLastCrossover = 0;
-          lastCrossoverDir = -1;
-        }
+        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
+        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
       }
 
       // 2. Bollinger Bands
@@ -169,8 +148,6 @@ export function createStrategy(): StrategyInstance {
       priceHistory = [];
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
-      ticksSinceLastCrossover = PARAMS.minTicksSinceCrossover;
-      lastCrossoverDir = 0;
       totalTicks = 0;
     },
   };
