@@ -20,22 +20,25 @@ import type { Tick, TradeDecision, StrategyInstance } from "./types";
 // ============================================================
 
 const PARAMS = {
-  // EMA Crossover (Trend Following)
+  // EMA for trend context
   shortWindow: 8,            // Short EMA period
   longWindow: 21,            // Long EMA period
 
-  // Bollinger Bands (Mean Reversion)
-  bbWindow: 20,              // Rolling window for mean + stddev
-  bbMultiplier: 3.0,         // Stddev multiplier for BB bands
+  // Donchian Channel Breakout
+  donchianWindow: 5,         // Look back N ticks for high/low breakout detection
+
+  // Bollinger Bands (Mean Reversion — disabled at 3.0)
+  bbWindow: 20,
+  bbMultiplier: 3.0,
 
   // Trade Management
   contractDuration: 4,       // Ticks per contract
   stakePercent: 0.14,        // Fraction of balance per trade
-  cooldownTicks: 3,          // Min ticks between signal trades (lower to get more trades)
+  cooldownTicks: 3,          // Min ticks between signal trades
   minTicks: 15,              // Warmup period before first trade
 
-  // Higher threshold = only very strong signals
-  compositeThreshold: 0.6,   // Very strict: requires EMA + momentum alignment
+  // Only trade breakouts when EMA trend agrees
+  compositeThreshold: 0.6,
 };
 
 // ============================================================
@@ -70,7 +73,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 + Donchian5 breakout thresh0.6 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -99,10 +102,10 @@ export function createStrategy(): StrategyInstance {
 
       // ---- Signals ----
       let trendSignal = 0;
-      let reversionSignal = 0;
+      let breakoutSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover
+      // 1. EMA Crossover (as before)
       if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
@@ -110,7 +113,17 @@ export function createStrategy(): StrategyInstance {
         else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
       }
 
-      // 2. Bollinger Bands
+      // 2. Donchian Channel Breakout (new signal)
+      if (priceHistory.length > PARAMS.donchianWindow) {
+        const lookback = priceHistory.slice(-(PARAMS.donchianWindow + 1), -1); // exclude current tick
+        const highestBefore = Math.max(...lookback);
+        const lowestBefore = Math.min(...lookback);
+        if (price > highestBefore) breakoutSignal = 1.0;    // new N-tick high → bullish
+        else if (price < lowestBefore) breakoutSignal = -1.0; // new N-tick low → bearish
+      }
+
+      // 3. Bollinger Bands (disabled at 3.0)
+      let reversionSignal = 0;
       if (priceHistory.length >= PARAMS.bbWindow) {
         const mean = getMean();
         const stdDev = getStdDev(mean);
@@ -122,13 +135,14 @@ export function createStrategy(): StrategyInstance {
         }
       }
 
-      // 3. Micro-Momentum
+      // 4. Micro-Momentum
       if (prevPrice !== null && price !== prevPrice) {
         momentumSignal = price > prevPrice ? 1.0 : -1.0;
       }
 
-      // Blend: 0.5 trend + 0.3 reversion + 0.2 momentum
-      const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
+      // Blend: EMA crossover (0.5) + Donchian breakout (0.3) + momentum (0.2)
+      // Both EMA crossover+momentum (0.7) and Donchian+momentum (0.5) can fire
+      const composite = trendSignal * 0.5 + breakoutSignal * 0.3 + momentumSignal * 0.2;
 
       if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
 
