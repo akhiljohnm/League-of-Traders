@@ -171,6 +171,7 @@ export function createStrategy(): StrategyInstance {
       }
       // High-vol early game: require stronger signal (blocks pure BB reversion)
       if (relVol > 0.0006) regularThreshold = Math.max(regularThreshold, 0.50);
+      else if (relVol > 0.0004) regularThreshold = Math.max(regularThreshold, 0.35);
       // Late game requires strong signal: trend+momentum (0.70) or better
       const signalThreshold = isLateGame ? 0.70 : regularThreshold;
       if (Math.abs(composite) < signalThreshold) return null;
