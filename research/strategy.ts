@@ -24,18 +24,22 @@ const PARAMS = {
   shortWindow: 8,            // Short EMA period
   longWindow: 21,            // Long EMA period
 
-  // Bollinger Bands (Mean Reversion)
-  bbWindow: 20,              // Rolling window for mean + stddev
-  bbMultiplier: 3.0,         // Stddev multiplier for BB bands
+  // Bollinger Bands (Mean Reversion — disabled at 3.0)
+  bbWindow: 20,
+  bbMultiplier: 3.0,
 
   // Trade Management
   contractDuration: 4,       // Ticks per contract
   stakePercent: 0.14,        // Fraction of balance per trade
-  cooldownTicks: 3,          // Min ticks between signal trades (lower to get more trades)
+  cooldownTicks: 3,          // Min ticks between signal trades
   minTicks: 15,              // Warmup period before first trade
 
+  // Crossover recency filter: don't trade if the SAME crossover just happened <4 ticks ago
+  // This filters whipsaw re-crossovers while keeping cooldown=3 for trade spacing
+  minTicksSinceCrossover: 4, // Must wait this long after any crossover to trade
+
   // Higher threshold = only very strong signals
-  compositeThreshold: 0.6,   // Very strict: requires EMA + momentum alignment
+  compositeThreshold: 0.6,   // Requires EMA + momentum alignment
 };
 
 // ============================================================
@@ -56,6 +60,7 @@ export function createStrategy(): StrategyInstance {
   let priceHistory: number[] = [];
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
+  let ticksSinceAnyCrossover = PARAMS.minTicksSinceCrossover; // starts ready
   let totalTicks = 0;
 
   function getMean(): number {
@@ -70,12 +75,13 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 xoRecency4 cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
       totalTicks++;
       ticksSinceLastTrade++;
+      ticksSinceAnyCrossover++;
 
       priceHistory.push(price);
       if (priceHistory.length > PARAMS.bbWindow * 2) {
@@ -102,12 +108,17 @@ export function createStrategy(): StrategyInstance {
       let reversionSignal = 0;
       let momentumSignal = 0;
 
-      // 1. EMA Crossover
+      // 1. EMA Crossover — track ALL crossovers (for recency filter) + generate signal
       if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
-        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
-        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
+        if (prevDiff <= 0 && currDiff > 0) {
+          ticksSinceAnyCrossover = 0;  // reset crossover timer
+          trendSignal = 1.0;
+        } else if (prevDiff >= 0 && currDiff < 0) {
+          ticksSinceAnyCrossover = 0;
+          trendSignal = -1.0;
+        }
       }
 
       // 2. Bollinger Bands
@@ -132,6 +143,10 @@ export function createStrategy(): StrategyInstance {
 
       if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
 
+      // Crossover recency filter: if we've had a crossover too recently, skip
+      // (filters rapid whipsaw re-crossovers that immediately reverse)
+      if (ticksSinceAnyCrossover < PARAMS.minTicksSinceCrossover) return null;
+
       const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
       const stakeAmt = Math.round(balance * PARAMS.stakePercent * 100) / 100;
       if (stakeAmt < minStake) return null;
@@ -148,6 +163,7 @@ export function createStrategy(): StrategyInstance {
       priceHistory = [];
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
+      ticksSinceAnyCrossover = PARAMS.minTicksSinceCrossover;
       totalTicks = 0;
     },
   };
