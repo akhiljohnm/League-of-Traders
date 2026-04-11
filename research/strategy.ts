@@ -22,7 +22,7 @@ import type { Tick, TradeDecision, StrategyInstance } from "./types";
 const PARAMS = {
   // EMA Crossover (Trend Following)
   shortWindow: 8,            // Short EMA period
-  longWindow: 21,            // Long EMA period
+  longWindow: 25,            // Long EMA period
 
   // Bollinger Bands (Mean Reversion)
   bbWindow: 20,              // Rolling window for mean + stddev
@@ -72,7 +72,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 1tick-persist BB3.0 thresh0.6 cd3 s14-fixed dur4",
+    name: "AutoResearch EMA 8/25 1tick-persist BB3.0 thresh0.6 cd3 s14-fixed dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
