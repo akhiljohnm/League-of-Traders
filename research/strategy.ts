@@ -24,20 +24,15 @@ const PARAMS = {
   shortWindow: 8,            // Short EMA period
   longWindow: 21,            // Long EMA period
 
-  // Bollinger Bands (with EMA trend gate)
-  bbWindow: 20,              // Rolling window for mean + stddev
-  bbMultiplier: 2.0,         // 2.0 stddev — BB fires more often than 3.0
-  // BB reversion only fires when it agrees with EMA trend direction
-  // (no counter-trend BB trades)
+  // Bollinger Bands for pullback detection
+  bbWindow: 20,
+  bbMultiplier: 2.0,         // 2.0 stddev
 
   // Trade Management
   contractDuration: 4,       // Ticks per contract
   stakePercent: 0.14,        // Fraction of balance per trade
   cooldownTicks: 3,          // Min ticks between signal trades
   minTicks: 15,              // Warmup period before first trade
-
-  // Higher threshold = only very strong signals
-  compositeThreshold: 0.6,   // Requires EMA + momentum alignment
 };
 
 // ============================================================
@@ -72,7 +67,7 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB2.0 trendGated thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch dual-path EMA-xover+momentum OR BB-pullback+momentum cd3 s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
@@ -99,49 +94,44 @@ export function createStrategy(): StrategyInstance {
 
       if (ticksSinceLastTrade < PARAMS.cooldownTicks) return null;
 
-      // ---- Signals ----
-      let trendSignal = 0;
-      let reversionSignal = 0;
-      let momentumSignal = 0;
+      if (shortEMA === null || longEMA === null || prevShortEMA === null || prevLongEMA === null) return null;
 
-      // 1. EMA Crossover
-      if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
-        const prevDiff = prevShortEMA - prevLongEMA;
-        const currDiff = shortEMA - longEMA;
-        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
-        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
-      }
+      // Micro-momentum (always computed)
+      const momentumUp = prevPrice !== null && price > prevPrice;
+      const momentumDown = prevPrice !== null && price < prevPrice;
 
-      // 2. EMA trend direction (for gating BB)
-      const emaDirection = (shortEMA !== null && longEMA !== null)
-        ? (shortEMA > longEMA ? 1 : shortEMA < longEMA ? -1 : 0)
-        : 0;
+      // ---- Path A: EMA Crossover + Momentum ----
+      const prevDiff = prevShortEMA - prevLongEMA;
+      const currDiff = shortEMA - longEMA;
+      const emaCrossUp = prevDiff <= 0 && currDiff > 0 && momentumUp;
+      const emaCrossDown = prevDiff >= 0 && currDiff < 0 && momentumDown;
 
-      // 3. Bollinger Bands — ONLY in direction of EMA trend
-      // This turns BB reversion into "trend pullback" trades
+      // ---- Path B: BB Pullback in EMA Trend Direction + Momentum ----
+      const emaUptrend = shortEMA > longEMA;
+      const emaDowntrend = shortEMA < longEMA;
+      let bbPullbackUp = false;
+      let bbPullbackDown = false;
+
       if (priceHistory.length >= PARAMS.bbWindow) {
         const mean = getMean();
         const stdDev = getStdDev(mean);
         if (stdDev > 0) {
           const upper = mean + PARAMS.bbMultiplier * stdDev;
           const lower = mean - PARAMS.bbMultiplier * stdDev;
-          // Only take BB signals that align with EMA trend direction
-          if (price < lower && emaDirection > 0) reversionSignal = 1.0;  // oversold in uptrend
-          else if (price > upper && emaDirection < 0) reversionSignal = -1.0;  // overbought in downtrend
+          // Pullback: price hits lower BB but EMA says uptrend → buy the dip with momentum confirm
+          bbPullbackUp = price < lower && emaUptrend && momentumUp;
+          // Pullback: price hits upper BB but EMA says downtrend → sell the bounce with momentum
+          bbPullbackDown = price > upper && emaDowntrend && momentumDown;
         }
       }
 
-      // 4. Micro-Momentum
-      if (prevPrice !== null && price !== prevPrice) {
-        momentumSignal = price > prevPrice ? 1.0 : -1.0;
-      }
+      // ---- Fire if either path triggers ----
+      let direction: "UP" | "DOWN" | null = null;
+      if (emaCrossUp || bbPullbackUp) direction = "UP";
+      else if (emaCrossDown || bbPullbackDown) direction = "DOWN";
 
-      // Blend: 0.5 trend + 0.3 reversion + 0.2 momentum
-      const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
+      if (direction === null) return null;
 
-      if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
-
-      const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
       const stakeAmt = Math.round(balance * PARAMS.stakePercent * 100) / 100;
       if (stakeAmt < minStake) return null;
 
