@@ -24,18 +24,23 @@ const PARAMS = {
   shortWindow: 8,            // Short EMA period
   longWindow: 21,            // Long EMA period
 
-  // Bollinger Bands (Mean Reversion)
-  bbWindow: 20,              // Rolling window for mean + stddev
-  bbMultiplier: 3.0,         // Stddev multiplier for BB bands
+  // EMA trend-riding: fires when EMA is in stable trend (between crossovers)
+  // and momentum confirms (no crossover needed)
+  trendRidingMinTicks: 5,    // Must be N ticks since last crossover before trend-riding fires
+  trendRidingCooldown: 6,    // Separate cooldown for trend-riding signals (wider spacing)
+
+  // Bollinger Bands (Mean Reversion — disabled at 3.0)
+  bbWindow: 20,
+  bbMultiplier: 3.0,
 
   // Trade Management
   contractDuration: 4,       // Ticks per contract
   stakePercent: 0.14,        // Fraction of balance per trade
-  cooldownTicks: 3,          // Min ticks between signal trades (lower to get more trades)
+  cooldownTicks: 3,          // Min ticks between signal trades
   minTicks: 15,              // Warmup period before first trade
 
   // Higher threshold = only very strong signals
-  compositeThreshold: 0.6,   // Very strict: requires EMA + momentum alignment
+  compositeThreshold: 0.6,   // Requires EMA crossover + momentum alignment
 };
 
 // ============================================================
@@ -56,6 +61,8 @@ export function createStrategy(): StrategyInstance {
   let priceHistory: number[] = [];
   let lastPrice: number | null = null;
   let ticksSinceLastTrade = PARAMS.cooldownTicks;
+  let ticksSinceCrossover = 999;   // tracks how long since last EMA crossover
+  let ticksSinceTrendRide = PARAMS.trendRidingCooldown; // separate cooldown for trend-riding
   let totalTicks = 0;
 
   function getMean(): number {
@@ -70,12 +77,14 @@ export function createStrategy(): StrategyInstance {
   }
 
   return {
-    name: "AutoResearch EMA 8/21 BB3.0 thresh0.6 cd3 s14 dur4",
+    name: "AutoResearch EMA 8/21 xover+mom OR trend-ride(minXO5 cd6) s14 dur4",
 
     onTick(tick: Tick, balance: number, buyIn: number): TradeDecision | null {
       const price = tick.quote;
       totalTicks++;
       ticksSinceLastTrade++;
+      ticksSinceCrossover++;
+      ticksSinceTrendRide++;
 
       priceHistory.push(price);
       if (priceHistory.length > PARAMS.bbWindow * 2) {
@@ -106,8 +115,13 @@ export function createStrategy(): StrategyInstance {
       if (prevShortEMA !== null && prevLongEMA !== null && shortEMA !== null && longEMA !== null) {
         const prevDiff = prevShortEMA - prevLongEMA;
         const currDiff = shortEMA - longEMA;
-        if (prevDiff <= 0 && currDiff > 0) trendSignal = 1.0;
-        else if (prevDiff >= 0 && currDiff < 0) trendSignal = -1.0;
+        if (prevDiff <= 0 && currDiff > 0) {
+          trendSignal = 1.0;
+          ticksSinceCrossover = 0;
+        } else if (prevDiff >= 0 && currDiff < 0) {
+          trendSignal = -1.0;
+          ticksSinceCrossover = 0;
+        }
       }
 
       // 2. Bollinger Bands
@@ -130,14 +144,36 @@ export function createStrategy(): StrategyInstance {
       // Blend: 0.5 trend + 0.3 reversion + 0.2 momentum
       const composite = trendSignal * 0.5 + reversionSignal * 0.3 + momentumSignal * 0.2;
 
-      if (Math.abs(composite) < PARAMS.compositeThreshold) return null;
+      // Primary signal: EMA crossover + momentum
+      if (Math.abs(composite) >= PARAMS.compositeThreshold && ticksSinceLastTrade >= PARAMS.cooldownTicks) {
+        const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
+        const stakeAmt = Math.round(balance * PARAMS.stakePercent * 100) / 100;
+        if (stakeAmt >= minStake) {
+          ticksSinceLastTrade = 0;
+          ticksSinceTrendRide = 0;
+          return { direction, stake: stakeAmt, duration: PARAMS.contractDuration };
+        }
+      }
 
-      const direction: "UP" | "DOWN" = composite > 0 ? "UP" : "DOWN";
-      const stakeAmt = Math.round(balance * PARAMS.stakePercent * 100) / 100;
-      if (stakeAmt < minStake) return null;
+      // Trend-riding signal: fires when EMA in stable trend + momentum, separate cooldown
+      if (ticksSinceCrossover >= PARAMS.trendRidingMinTicks &&
+          ticksSinceTrendRide >= PARAMS.trendRidingCooldown &&
+          ticksSinceLastTrade >= PARAMS.cooldownTicks &&
+          shortEMA !== null && longEMA !== null) {
+        const emaDir = shortEMA > longEMA ? 1 : shortEMA < longEMA ? -1 : 0;
+        // Trade in EMA trend direction if momentum agrees
+        if (emaDir !== 0 && momentumSignal === emaDir) {
+          const direction: "UP" | "DOWN" = emaDir > 0 ? "UP" : "DOWN";
+          const stakeAmt = Math.round(balance * PARAMS.stakePercent * 100) / 100;
+          if (stakeAmt >= minStake) {
+            ticksSinceLastTrade = 0;
+            ticksSinceTrendRide = 0;
+            return { direction, stake: stakeAmt, duration: PARAMS.contractDuration };
+          }
+        }
+      }
 
-      ticksSinceLastTrade = 0;
-      return { direction, stake: stakeAmt, duration: PARAMS.contractDuration };
+      return null;
     },
 
     reset() {
@@ -148,6 +184,8 @@ export function createStrategy(): StrategyInstance {
       priceHistory = [];
       lastPrice = null;
       ticksSinceLastTrade = PARAMS.cooldownTicks;
+      ticksSinceCrossover = 999;
+      ticksSinceTrendRide = PARAMS.trendRidingCooldown;
       totalTicks = 0;
     },
   };
