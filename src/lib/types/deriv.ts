@@ -20,6 +20,31 @@ export interface DerivTickMessage {
   subscription?: { id: string };
 }
 
+// ---- Tick History ----
+
+export interface DerivTicksHistoryRequest {
+  ticks_history: string; // symbol
+  adjust_start_time?: number;
+  count?: number;
+  end?: string | number;
+  start?: number;
+  style?: "ticks" | "candles";
+  req_id?: number;
+  subscribe?: number;
+}
+
+export interface DerivTicksHistoryResponse {
+  echo_req: DerivTicksHistoryRequest;
+  history: {
+    prices: number[];
+    times: number[];
+  };
+  msg_type: "history" | "candles";
+  pip_size: number;
+  subscription?: { id: string };
+  req_id?: number;
+}
+
 // ---- Active Symbols ----
 
 export interface DerivActiveSymbol {
@@ -80,6 +105,7 @@ export interface DerivForgetAllMessage {
 
 export type DerivMessage =
   | DerivTickMessage
+  | DerivTicksHistoryResponse
   | DerivActiveSymbolsMessage
   | DerivErrorMessage
   | DerivPingMessage
