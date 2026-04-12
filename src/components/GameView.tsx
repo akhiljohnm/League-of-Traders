@@ -13,6 +13,7 @@ import { TICK_DURATION_OPTIONS, RISE_PAYOUT, FALL_PAYOUT } from "@/lib/game/rise
 import { updatePlayerFinalBalance } from "@/lib/actions/lobby";
 import type { Player, LobbyPlayer, TradeDirection } from "@/lib/types/database";
 import type { DerivTick } from "@/lib/types/deriv";
+import TradingChart from "@/components/TradingChart";
 
 // ============================================================
 // GameView — The full trading cockpit UI
@@ -115,10 +116,12 @@ export default function GameView({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
         {/* Left: Price + Trading Controls */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Price Display */}
-          <PriceDisplay
+          {/* Real-Time Trading Chart */}
+          <TradingChart
+            symbol={symbol}
             currentTick={engine.currentTick}
-            previousTick={engine.previousTick}
+            playerBalances={engine.playerBalances}
+            lobbyId={lobbyId}
           />
 
           {/* Player Stats Bar */}

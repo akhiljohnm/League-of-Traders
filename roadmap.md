@@ -86,3 +86,23 @@ The AutoResearch loop (`research/strategy.ts`) optimizes a single core signal en
 - [x] Highlight if an AI Bot carried the team or needed rescuing.
 - [x] Complete the "Vibe-Coding Docs" detailing prompt history, the Karpathy auto-research logs, and AI troubleshooting.
 - [x] Final verification of the live Vercel deployment for the judges.
+
+## Phase 9: Real-Time Trading Chart with Player Trade Markers 📊
+*Goal: Add professional trading chart visualization with live price updates and color-coded trade markers for all players.*
+- [ ] Add TradingView Lightweight Charts library (free, MIT license, optimized for financial data)
+- [ ] Extend Deriv types to support `ticks_history` API (historical tick data)
+- [ ] Create `useTickHistory` hook to fetch historical ticks via WebSocket on game start
+- [ ] Build `TradingChart` component:
+  - [ ] Line chart displaying price over time
+  - [ ] Real-time updates from live tick stream
+  - [ ] Auto-scrolling viewport (last 100 ticks visible)
+  - [ ] Responsive container with fixed aspect ratio
+- [ ] Implement trade marker system:
+  - [ ] Entry markers (triangle up/down) at trade placement price/time
+  - [ ] Exit markers (circle) at trade resolution price/time
+  - [ ] Color-code markers by player (distinct colors for each player)
+  - [ ] Hover tooltips showing trade details (player, direction, stake, result)
+- [ ] Subscribe to all players' trades via Supabase Realtime to add markers dynamically
+- [ ] Integrate chart into GameView (replace simple PriceDisplay or add below it)
+- [ ] Handle edge cases: disconnects, rapid trades, game end force-resolution
+- [ ] Performance optimization: limit marker count, debounce updates
