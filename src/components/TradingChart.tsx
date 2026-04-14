@@ -303,7 +303,12 @@ export default function TradingChart({
 
   // ---- Render trade markers ----
   useEffect(() => {
-    if (!seriesRef.current || chartData.length === 0 || allTrades.length === 0) return;
+    if (!seriesRef.current) return;
+
+    if (allTrades.length === 0) {
+      seriesRef.current.setMarkers([]);
+      return;
+    }
 
     const markers: any[] = [];
 
@@ -313,13 +318,14 @@ export default function TradingChart({
       // Convert ISO timestamp to Unix epoch (seconds)
       const entryTime = Math.floor(new Date(trade.created_at).getTime() / 1000) as Time;
 
-      // Entry marker (always render)
+      // Entry marker (always render) - use belowBar for better visibility
       markers.push({
         time: entryTime,
         position: "belowBar",
         color,
         shape: trade.direction === "UP" ? "arrowUp" : "arrowDown",
         text: `${trade.direction} $${trade.stake.toFixed(0)}`,
+        size: 2, // Make markers larger
       });
 
       // Exit marker (only for resolved trades)
@@ -340,12 +346,16 @@ export default function TradingChart({
           text: trade.status === "won"
             ? `+$${displayPayout.toFixed(0)}`
             : `-$${trade.stake.toFixed(0)}`,
+          size: 2, // Make markers larger
         });
       }
     });
 
+    // Sort markers by time (ascending order required by lightweight-charts)
+    markers.sort((a, b) => a.time - b.time);
+
     seriesRef.current.setMarkers(markers);
-  }, [allTrades, chartData]);
+  }, [allTrades]);
 
   if (isLoading) {
     return (
