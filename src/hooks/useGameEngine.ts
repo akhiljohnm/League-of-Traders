@@ -168,7 +168,70 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
     );
   }, [lobbyId, allPlayers]);
 
-  // ---- Subscribe to other players' trades via Supabase Realtime ----
+  // ---- Single source of truth: recompute all other humans' balances from DB ----
+  // Uses one batched query instead of N separate queries.
+  // Called on initial subscription, on every relevant Realtime event, and by the polling reconciler.
+  const syncOtherHumanBalances = useCallback(async () => {
+    const otherHumanIds = allPlayers
+      .filter((lp) => lp.player.id !== currentPlayer.id && !lp.player.is_bot)
+      .map((lp) => lp.player.id);
+
+    if (otherHumanIds.length === 0) return;
+
+    try {
+      const { data: trades, error } = await supabase
+        .from("trades")
+        .select("player_id, stake, direction, status")
+        .eq("lobby_id", lobbyId)
+        .in("player_id", otherHumanIds);
+
+      if (error) {
+        console.error("[GameEngine] syncOtherHumanBalances query error:", error.message);
+        return;
+      }
+      if (!trades) return;
+
+      // Recompute balance for each player from their full trade history
+      const computed = new Map<string, { balance: number; tradeCount: number }>();
+      for (const id of otherHumanIds) {
+        computed.set(id, { balance: buyIn, tradeCount: 0 });
+      }
+
+      for (const t of trades) {
+        const entry = computed.get(t.player_id);
+        if (!entry) continue;
+        entry.balance -= t.stake;
+        entry.tradeCount++;
+        if (t.status === "won") {
+          entry.balance += Math.round(
+            t.stake * getPayoutMultiplier(t.direction as TradeDirection) * 100
+          ) / 100;
+        }
+      }
+
+      setOtherHumanBalances((prev) => {
+        let changed = false;
+        const next = new Map(prev);
+        for (const [id, data] of computed) {
+          const old = prev.get(id);
+          // Compare in cents to avoid floating-point false positives
+          const balanceDrifted = !old || Math.round(old.balance * 100) !== Math.round(data.balance * 100);
+          const countDrifted = !old || old.tradeCount !== data.tradeCount;
+          if (balanceDrifted || countDrifted) {
+            next.set(id, { balance: Math.round(data.balance * 100) / 100, tradeCount: data.tradeCount });
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    } catch (err) {
+      console.error("[GameEngine] syncOtherHumanBalances error:", err);
+    }
+  }, [allPlayers, currentPlayer.id, lobbyId, buyIn]);
+
+  // ---- Supabase Realtime WebSocket — live trade updates ----
+  // On any trade INSERT or UPDATE for this lobby, trigger a full recompute
+  // instead of tracking incrementally (incremental state drifts on missed events).
   useEffect(() => {
     const otherHumanIds = allPlayers
       .filter((lp) => lp.player.id !== currentPlayer.id && !lp.player.is_bot)
@@ -177,7 +240,7 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
     if (otherHumanIds.length === 0) return;
 
     console.log(
-      `[GameEngine] Subscribing to trades Realtime for ${otherHumanIds.length} teammate(s) in lobby ${lobbyId}`
+      `[GameEngine] Opening Realtime WebSocket for ${otherHumanIds.length} teammate(s) in lobby ${lobbyId}`
     );
 
     const channel = supabase
@@ -185,141 +248,47 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "trades",
           filter: `lobby_id=eq.${lobbyId}`,
         },
         (payload) => {
-          const row = payload.new as {
-            player_id: string;
-            stake: number;
-            direction: TradeDirection;
-          };
-          // Only track other humans (not current player, not bots)
+          const row = payload.new as { player_id: string };
+          // Ignore current player and bot trades — only sync for other humans
           if (!otherHumanIds.includes(row.player_id)) return;
-
-          console.log(
-            `[GameEngine] Realtime: Teammate ${row.player_id} placed ${row.direction} $${row.stake} trade`
-          );
-
-          setOtherHumanBalances((prev) => {
-            const next = new Map(prev);
-            const current = next.get(row.player_id) ?? {
-              balance: buyIn,
-              tradeCount: 0,
-            };
-            next.set(row.player_id, {
-              balance: current.balance - row.stake,
-              tradeCount: current.tradeCount + 1,
-            });
-            return next;
-          });
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "trades",
-          filter: `lobby_id=eq.${lobbyId}`,
-        },
-        (payload) => {
-          const row = payload.new as {
-            player_id: string;
-            stake: number;
-            direction: TradeDirection;
-            status: string;
-            payout: number | null;
-          };
-          if (!otherHumanIds.includes(row.player_id)) return;
-          if (row.status !== "won" && row.status !== "lost") return;
-
-          // Calculate gross payout the same way rise-fall.ts does
-          const grossPayout =
-            row.status === "won"
-              ? Math.round(row.stake * getPayoutMultiplier(row.direction) * 100) / 100
-              : 0;
-
-          console.log(
-            `[GameEngine] Realtime: Teammate ${row.player_id} trade ${row.status}: ${row.status === "won" ? `+$${grossPayout}` : `-$${row.stake}`}`
-          );
-
-          setOtherHumanBalances((prev) => {
-            const next = new Map(prev);
-            const current = next.get(row.player_id) ?? {
-              balance: buyIn,
-              tradeCount: 0,
-            };
-            next.set(row.player_id, {
-              ...current,
-              balance: current.balance + grossPayout,
-            });
-            return next;
-          });
+          console.log(`[GameEngine] Realtime: trade event for teammate ${row.player_id} — syncing balances`);
+          syncOtherHumanBalances();
         }
       )
       .subscribe((status) => {
-        console.log(`[GameEngine] Trades Realtime status: ${status}`);
+        console.log(`[GameEngine] Realtime channel status: ${status}`);
+        if (status === "SUBSCRIBED") {
+          // Immediately sync on channel open to catch trades placed before we subscribed
+          syncOtherHumanBalances();
+        }
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.error(`[GameEngine] Realtime channel ${status} — polling reconciler will catch up`);
+        }
       });
 
     return () => {
-      console.log("[GameEngine] Unsubscribing from trades Realtime");
+      console.log("[GameEngine] Closing Realtime WebSocket channel");
       supabase.removeChannel(channel);
     };
-  }, [lobbyId, allPlayers, currentPlayer.id, buyIn]);
+  }, [lobbyId, allPlayers, currentPlayer.id, syncOtherHumanBalances]);
 
-  // ---- Polling fallback: sync other humans' trade data every 3s ----
-  // Ensures balance/trade info updates even when Realtime is broken
+  // ---- Polling reconciler: re-sync every 3s as a safety net ----
+  // Ensures eventual consistency if Realtime events are dropped.
   useEffect(() => {
-    const otherHumanIds = allPlayers
-      .filter((lp) => lp.player.id !== currentPlayer.id && !lp.player.is_bot)
-      .map((lp) => lp.player.id);
+    if (gamePhase === "finished") return;
 
-    if (otherHumanIds.length === 0) return;
-    if (gamePhase !== "active") return;
-
-    const interval = setInterval(async () => {
-      try {
-        for (const playerId of otherHumanIds) {
-          // Fetch all trades for this player in this lobby
-          const { data: trades } = await supabase
-            .from("trades")
-            .select("stake, direction, status, payout")
-            .eq("lobby_id", lobbyId)
-            .eq("player_id", playerId);
-
-          if (!trades) continue;
-
-          const tradeCount = trades.length;
-          // Compute balance from trade history: start with buyIn, subtract stakes, add gross payouts for wins
-          let balance = buyIn;
-          for (const t of trades) {
-            balance -= t.stake;
-            if (t.status === "won") {
-              balance += Math.round(t.stake * getPayoutMultiplier(t.direction as TradeDirection) * 100) / 100;
-            }
-          }
-
-          setOtherHumanBalances((prev) => {
-            const next = new Map(prev);
-            const current = next.get(playerId);
-            // Only update if data actually changed
-            if (!current || current.balance !== balance || current.tradeCount !== tradeCount) {
-              next.set(playerId, { balance, tradeCount });
-              return next;
-            }
-            return prev;
-          });
-        }
-      } catch (err) {
-        console.error("[GameEngine] Trade poll error:", err);
-      }
+    const interval = setInterval(() => {
+      syncOtherHumanBalances();
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [lobbyId, allPlayers, currentPlayer.id, buyIn, gamePhase]);
+  }, [gamePhase, syncOtherHumanBalances]);
 
   // ---- Transition to active once connected ----
   useEffect(() => {
@@ -402,7 +371,29 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
       }
     }
 
-    // 3. Run payout engine on raw balances
+    // 3. Detect forfeited players: they wrote final_balance=0 to lobby_players via handleConfirmExit.
+    // A null final_balance means the game is still in progress (not forfeited).
+    // Explicitly 0 means the player exited early and their balance goes to the Safety Net.
+    const forfeitedPlayerIds = new Set<string>();
+    try {
+      const { data: lobbyState } = await supabase
+        .from("lobby_players")
+        .select("player_id, final_balance")
+        .eq("lobby_id", lobbyId);
+
+      if (lobbyState) {
+        for (const row of lobbyState) {
+          if (row.final_balance === 0) {
+            forfeitedPlayerIds.add(row.player_id);
+            console.log(`[GameEngine] Detected forfeited player: ${row.player_id}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[GameEngine] Failed to detect forfeited players:", err);
+    }
+
+    // 4. Run payout engine on raw balances
     const payoutInputs: PayoutInput[] = allPlayers.map((lp) => {
       let rawBalance: number;
       let tradeCount: number;
@@ -427,6 +418,7 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
         tradeCount,
         isBot: lp.player.is_bot,
         hiredBy: lp.hired_by,
+        hasForfeited: forfeitedPlayerIds.has(lp.player.id),
       };
     });
 
@@ -437,22 +429,22 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
       safetyNet: payout.safetyNetTotal,
       bailout: payout.bailoutDistributed,
       spillover: payout.spilloverDistributed,
-      inactive: payout.inactiveForfeited,
+      forfeited: payout.forfeitedTotal,
     });
 
-    // 4. Write payout-adjusted final balances to DB
+    // 5. Write payout-adjusted final balances to DB
     for (const p of payout.players) {
       await updatePlayerFinalBalance(lobbyId, p.playerId, p.finalBalance);
     }
 
-    // 5. End the game in DB
+    // 6. End the game in DB
     try {
       await endGame(lobbyId);
     } catch (err) {
       console.error("[GameEngine] Failed to end game in DB:", err);
     }
 
-    // 6. Credit final payout back to human player's global balance
+    // 7. Credit final payout back to human player's global balance
     const humanPayout = payout.players.find(
       (p) => p.playerId === currentPlayer.id
     );

@@ -44,10 +44,12 @@ All trades in the game use the **Rise/Fall** contract type, simulated locally:
 
 ### 🧠 The 80/20 Payout Engine (CRITICAL MATH)
 When the 5-minute timer ends, the game calculates payouts based on the **Profit Contribution Model**:
-1. **Active Quota:** Any player with fewer than 5 trades forfeits their balance.
+1. **Active Quota:** Any player with fewer than 5 trades keeps their remaining balance but is **ineligible** for any bailout or spillover. Their balance is NOT forfeited to the Safety Net.
 2. **Alpha Tax:** Winning players (Balance > $10,000) keep 80% of their net profit + their $10,000 buy-in. The other 20% goes to the "Safety Net Fund."
 3. **The Bailout:** Losing players (Balance < $10,000) split the Safety Net evenly, strictly capped so their final balance never exceeds their original $10,000 buy-in.
-4. **Victory Spillover:** Any unused Safety Net funds are returned to the Alpha winners proportionally based on their profit generation.
+4. **Victory Spillover:** Any unused Safety Net funds are returned to the Alpha winners in an **equal split** (regardless of how much profit each Alpha generated).
+5. **Forfeited Players:** A player who exits mid-game has their entire remaining balance sent to the Safety Net and receives $0.
+6. **Bot Balance Routing:** After all redistribution, a hired bot's **entire final balance** (buy-in + profit/loss + any bailout/spillover) is transferred to the player who hired it. The bot ends at $0.
 
 ### 🤖 Phase 6: Mercenary Bots (The AI Flex)
 Users can pay $10,000 to fill empty lobby slots with AI Bots. We will build 3 bot profiles: *The Trend Follower, The Mean Reverter, The High-Frequency Gambler.* These strategies will be optimized using concepts from Andrej Karpathy's `auto-research` framework. The bots execute trades automatically on the human client's side during the game loop.

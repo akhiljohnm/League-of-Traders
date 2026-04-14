@@ -14,9 +14,11 @@ export interface PayoutInput {
   tradeCount: number;
   isBot: boolean;
   hiredBy: string | null;
+  /** Player explicitly exited mid-game — their balance goes to the Safety Net. */
+  hasForfeited: boolean;
 }
 
-export type PayoutRole = "alpha" | "rescue" | "even" | "inactive";
+export type PayoutRole = "alpha" | "rescue" | "even" | "inactive" | "forfeited";
 
 export interface PayoutResult {
   playerId: string;
@@ -45,7 +47,8 @@ export interface PayoutSummary {
   safetyNetTotal: number;
   bailoutDistributed: number;
   spilloverDistributed: number;
-  inactiveForfeited: number;
+  inactiveForfeited: number; // always 0 — inactive players keep their balance
+  forfeitedTotal: number;    // sum of balances forfeited to safety net by early-exit players
 }
 
 // ---- Main calculation ----
@@ -55,17 +58,38 @@ export function calculatePayouts(
   buyIn: number
 ): PayoutSummary {
   let safetyNet = 0;
-  let inactiveForfeited = 0;
+  let forfeitedTotal = 0;
 
-  // Step 1: Initialize results and handle inactive players
+  // Step 1: Initialize results and classify each player
   const results: PayoutResult[] = inputs.map((p) => {
+    // Forfeited players: exited mid-game — their entire balance goes to the Safety Net
+    if (p.hasForfeited) {
+      safetyNet += p.rawBalance;
+      forfeitedTotal += p.rawBalance;
+
+      return {
+        playerId: p.playerId,
+        username: p.username,
+        isBot: p.isBot,
+        tradeCount: p.tradeCount,
+        rawBalance: p.rawBalance,
+        role: "forfeited" as PayoutRole,
+        alphaTax: 0,
+        afterTaxBalance: 0,
+        bailoutReceived: 0,
+        spilloverReceived: 0,
+        botProfitRouted: 0,
+        finalBalance: 0,
+        hiredBy: p.hiredBy,
+      };
+    }
+
+    // Inactive players: did not meet minimum trade quota.
+    // They keep their balance but are ineligible for bailouts or spillover.
+    // Their balance is NOT forfeited to the Safety Net.
     const isInactive = p.tradeCount < MIN_TRADES_QUOTA;
 
     if (isInactive) {
-      // Forfeit balance to safety net
-      inactiveForfeited += p.rawBalance;
-      safetyNet += p.rawBalance;
-
       return {
         playerId: p.playerId,
         username: p.username,
@@ -74,11 +98,11 @@ export function calculatePayouts(
         rawBalance: p.rawBalance,
         role: "inactive" as PayoutRole,
         alphaTax: 0,
-        afterTaxBalance: 0,
+        afterTaxBalance: p.rawBalance,
         bailoutReceived: 0,
         spilloverReceived: 0,
         botProfitRouted: 0,
-        finalBalance: 0,
+        finalBalance: p.rawBalance,
         hiredBy: p.hiredBy,
       };
     }
@@ -151,64 +175,54 @@ export function calculatePayouts(
     safetyNet = round2(safetyNet - bailoutDistributed);
   }
 
-  // Step 4: Victory Spillover — return excess Safety Net to Alphas proportionally
+  // Step 4: Victory Spillover — return excess Safety Net to Alphas equally
+  // Spillover is always split equally regardless of profit size.
+  // If all players are Alpha (no rescues), the entire Safety Net is also split equally.
   let spilloverDistributed = 0;
   const alphas = results.filter((r) => r.role === "alpha");
 
   if (safetyNet > 0.01 && alphas.length > 0) {
-    const totalAlphaProfit = alphas.reduce(
-      (sum, a) => sum + (a.rawBalance - buyIn),
-      0
-    );
-
-    if (totalAlphaProfit > 0) {
-      for (const alpha of alphas) {
-        const profit = alpha.rawBalance - buyIn;
-        const share = round2((profit / totalAlphaProfit) * safetyNet);
-        alpha.spilloverReceived = share;
-        alpha.finalBalance = round2(alpha.finalBalance + share);
-        spilloverDistributed = round2(spilloverDistributed + share);
-      }
-    } else {
-      // Edge case: all alphas had 0 raw profit after tax, split evenly
-      const share = round2(safetyNet / alphas.length);
-      for (const alpha of alphas) {
-        alpha.spilloverReceived = share;
-        alpha.finalBalance = round2(alpha.finalBalance + share);
-        spilloverDistributed = round2(spilloverDistributed + share);
-      }
+    for (let i = 0; i < alphas.length; i++) {
+      // Give last alpha the remainder to absorb any floating-point rounding
+      const share =
+        i === alphas.length - 1
+          ? round2(safetyNet - spilloverDistributed)
+          : round2(safetyNet / alphas.length);
+      alphas[i].spilloverReceived = share;
+      alphas[i].finalBalance = round2(alphas[i].finalBalance + share);
+      spilloverDistributed = round2(spilloverDistributed + share);
     }
   }
 
-  // Step 5: Bot Profit Routing — hired bot's net profit goes to their owner
+  // Step 5: Bot Full Balance Routing — entire bot balance (including buyIn and any
+  // bailout/spillover received) is transferred to the player who hired the bot.
+  // The bot ends at $0. This applies regardless of win/loss.
   const playerMap = new Map(results.map((r) => [r.playerId, r]));
 
   for (const r of results) {
     if (r.isBot && r.hiredBy) {
-      const botProfit = round2(r.finalBalance - buyIn);
-      if (botProfit > 0) {
-        const owner = playerMap.get(r.hiredBy);
-        if (owner) {
-          // Transfer profit from bot to owner
-          r.botProfitRouted = -botProfit; // bot loses the profit
-          r.finalBalance = buyIn;         // bot resets to buyIn
-          owner.botProfitRouted = round2(owner.botProfitRouted + botProfit);
-          owner.finalBalance = round2(owner.finalBalance + botProfit);
+      const fullBalance = r.finalBalance;
+      const owner = playerMap.get(r.hiredBy);
+      if (owner && fullBalance > 0) {
+        r.botProfitRouted = -fullBalance; // bot transfers its entire balance
+        r.finalBalance = 0;              // bot ends at $0
+        owner.botProfitRouted = round2(owner.botProfitRouted + fullBalance);
+        owner.finalBalance = round2(owner.finalBalance + fullBalance);
 
-          console.log(
-            `[Payout] Bot ${r.username} routed $${botProfit.toFixed(2)} profit to ${owner.username}`
-          );
-        }
+        console.log(
+          `[Payout] Bot ${r.username} routed full balance $${fullBalance.toFixed(2)} to ${owner.username}`
+        );
       }
     }
   }
 
   return {
     players: results,
-    safetyNetTotal: round2(inactiveForfeited + alphas.reduce((s, a) => s + a.alphaTax, 0)),
+    safetyNetTotal: round2(forfeitedTotal + alphas.reduce((s, a) => s + a.alphaTax, 0)),
     bailoutDistributed,
     spilloverDistributed,
-    inactiveForfeited,
+    inactiveForfeited: 0,    // inactive players keep their balance — no forfeiture
+    forfeitedTotal: round2(forfeitedTotal),
   };
 }
 

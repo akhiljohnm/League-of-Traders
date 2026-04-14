@@ -242,8 +242,13 @@ function BotNarrativeCard({
       accentColor = "text-rekt-crimson";
       bgClass = "bg-rekt-crimson/5 border-rekt-crimson/20";
       break;
+    case "forfeited":
+      narrative = `Exited mid-game — $${fmt(Math.abs(pnl + buyIn))} sent to Safety Net`;
+      accentColor = "text-rekt-crimson";
+      bgClass = "bg-rekt-crimson/5 border-rekt-crimson/20";
+      break;
     case "inactive":
-      narrative = "Went AFK and forfeited everything";
+      narrative = "Went AFK — fewer than 5 trades, ineligible for payouts";
       accentColor = "text-text-muted";
       bgClass = "bg-bg-elevated/50 border-border-default";
       break;
@@ -294,7 +299,7 @@ function PayoutFlowSummary({
       color: "bg-safety-cyan",
       textColor: "text-safety-cyan",
       icon: "\u25B2", // ▲
-      description: "20% tax from Alpha winners + inactive forfeitures",
+      description: "20% tax from Alpha winners + early-exit forfeitures",
     },
     {
       label: "Bailout Distributed",
@@ -433,8 +438,8 @@ function PlayerResultCard({
         </div>
       </div>
 
-      {/* Payout flow details */}
-      {player.role !== "even" && player.role !== "inactive" && (
+      {/* Payout flow details — only for players who went through redistribution */}
+      {player.role !== "even" && player.role !== "inactive" && player.role !== "forfeited" && (
         <div className="mt-2 pt-2 border-t border-border-default/50 flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-mono-numbers text-text-muted">
           <span>Raw: ${fmt(player.rawBalance)}</span>
           {player.alphaTax > 0 && (
@@ -455,9 +460,15 @@ function PlayerResultCard({
         </div>
       )}
 
+      {player.role === "forfeited" && (
+        <div className="mt-2 pt-2 border-t border-border-default/50 text-[10px] text-rekt-crimson/80">
+          Exited mid-game — ${fmt(player.rawBalance)} forfeited to Safety Net
+        </div>
+      )}
+
       {player.role === "inactive" && (
         <div className="mt-2 pt-2 border-t border-border-default/50 text-[10px] text-text-muted">
-          Forfeited — fewer than 5 trades (${fmt(player.rawBalance)} sent to Safety Net)
+          Fewer than 5 trades — balance retained, ineligible for bailout or spillover
         </div>
       )}
     </div>
@@ -536,28 +547,31 @@ function YourResultCard({
 
 function roleColor(role: PayoutRole): string {
   switch (role) {
-    case "alpha": return "text-alpha-green";
-    case "rescue": return "text-rekt-crimson";
-    case "inactive": return "text-text-muted";
-    case "even": return "text-safety-cyan";
+    case "alpha":     return "text-alpha-green";
+    case "rescue":    return "text-rekt-crimson";
+    case "inactive":  return "text-text-muted";
+    case "even":      return "text-safety-cyan";
+    case "forfeited": return "text-rekt-crimson";
   }
 }
 
 function roleBg(role: PayoutRole): string {
   switch (role) {
-    case "alpha": return "bg-alpha-green/10 border-alpha-green/20";
-    case "rescue": return "bg-rekt-crimson/10 border-rekt-crimson/20";
-    case "inactive": return "bg-bg-elevated border-border-default opacity-50";
-    case "even": return "bg-safety-cyan/5 border-safety-cyan/20";
+    case "alpha":     return "bg-alpha-green/10 border-alpha-green/20";
+    case "rescue":    return "bg-rekt-crimson/10 border-rekt-crimson/20";
+    case "inactive":  return "bg-bg-elevated border-border-default opacity-50";
+    case "even":      return "bg-safety-cyan/5 border-safety-cyan/20";
+    case "forfeited": return "bg-rekt-crimson/5 border-rekt-crimson/30 opacity-60";
   }
 }
 
 function roleLabel(role: PayoutRole): string {
   switch (role) {
-    case "alpha": return "ALPHA";
-    case "rescue": return "RESCUE";
-    case "inactive": return "INACTIVE";
-    case "even": return "EVEN";
+    case "alpha":     return "ALPHA";
+    case "rescue":    return "RESCUE";
+    case "inactive":  return "INACTIVE";
+    case "even":      return "EVEN";
+    case "forfeited": return "FORFEITED";
   }
 }
 

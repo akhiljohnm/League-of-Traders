@@ -16,7 +16,7 @@
 ### 2. The "Skin in the Game" Quota (Anti-Leech)
 To prevent "free-riding" (players joining and going AFK to farm the safety net), players must meet an **Active Trader Quota**.
 * **Rule:** A player must execute a minimum of 5 trades during the game timer to be eligible for *any* payouts or bailouts.
-* **Penalty:** If the quota is not met, their ending balance is forfeited to the Safety Net Fund, and they receive $0.
+* **Penalty:** If the quota is not met, their ending balance is **kept as-is** (they do not receive it back as a reward — they simply keep what remains). However, they are **ineligible** for any bailout from the Safety Net or any Victory Spillover. Their balance is **not** forfeited to the Safety Net Fund.
 
 ---
 
@@ -78,7 +78,15 @@ The total Safety Net Fund is divided evenly among all "Rescue" players, subject 
 * **The Bailout Cap:** A player can **never** receive a bailout that puts their final balance above their original $10,000 buy-in. Losers cannot profit from the Safety Net.
 
 ### Phase 4: Victory Spillover (Excess Funds)
-If the Safety Net Fund is large enough to completely refund all losing players back to their $10,000 buy-in, any remaining funds left in the Safety Net are divided proportionally and returned to the "Alpha" players as an extra bonus.
+If the Safety Net Fund is large enough to completely refund all losing players back to their $10,000 buy-in, any remaining funds left in the Safety Net are divided **equally** among all Alpha players as a bonus — regardless of how much profit each Alpha generated.
+
+> **All-Alpha Edge Case:** If every player finishes as an Alpha (no Rescue players at all), the entire Safety Net (comprised solely of Alpha Tax contributions) is split equally among all players.
+
+### Phase 5: Mercenary Bot Balance Routing
+After all redistribution is complete, any bot that was hired by a human player has its **entire final balance** transferred to the hiring player. The bot ends at $0.
+* **Scope:** This includes the bot's original buy-in capital, any profit it earned, any bailout it received from the Safety Net, and any spillover bonus.
+* **Tax applies first:** A bot that finishes as an Alpha is taxed in Phase 2 like any other player. Only the post-tax, post-bailout, post-spillover balance is then routed to the owner.
+* **Losses included:** If the bot lost money, the remaining balance (e.g., $3,000 after bad trades) is still routed in full to its owner — the owner absorbs the bot's losses.
 
 ---
 
