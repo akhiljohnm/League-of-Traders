@@ -59,7 +59,7 @@ export interface Trade {
 // ---- Insert Types (omit server-generated fields) ----
 
 export type PlayerInsert = Pick<Player, "username"> &
-  Partial<Pick<Player, "is_bot" | "bot_strategy" | "game_token_balance">>;
+  Partial<Pick<Player, "is_bot" | "bot_strategy" | "game_token_balance" | "avatar_id">>;
 
 export type TradeInsert = Pick<
   Trade,

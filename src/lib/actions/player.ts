@@ -25,15 +25,18 @@ export async function getOrCreatePlayer(username: string, avatarId?: number): Pr
   if (existing && !findError) {
     // Backfill avatar if the player doesn't have one yet
     if (avatarId && !existing.avatar_id) {
-      const { data: updated } = await supabase
+      const { data: updated, error: updateErr } = await supabase
         .from("players")
         .update({ avatar_id: avatarId })
         .eq("id", existing.id)
         .select()
         .single();
-      if (updated) {
+      if (updated && !updateErr) {
         console.log(`[Player] Backfilled avatar ${avatarId} for ${existing.username}`);
         return updated as Player;
+      }
+      if (updateErr) {
+        console.warn(`[Player] Avatar backfill failed (${updateErr.message}), continuing without it`);
       }
     }
     console.log(`[Player] Found existing player: ${existing.username} (${existing.id})`);
@@ -41,16 +44,38 @@ export async function getOrCreatePlayer(username: string, avatarId?: number): Pr
   }
 
   // Create new player
-  const { data: created, error: createError } = await supabase
+  let created: Player | null = null;
+  let createError: { code?: string; message: string } | null = null;
+
+  // Try with avatar_id first, fall back without it if the column doesn't exist
+  const insertPayload: Record<string, unknown> = {
+    username: trimmed,
+    game_token_balance: STARTING_BALANCE,
+    is_bot: false,
+    avatar_id: avatarId ?? null,
+  };
+
+  const result = await supabase
     .from("players")
-    .insert({
-      username: trimmed,
-      game_token_balance: STARTING_BALANCE,
-      is_bot: false,
-      avatar_id: avatarId ?? null,
-    })
+    .insert(insertPayload)
     .select()
     .single();
+
+  created = result.data as Player | null;
+  createError = result.error;
+
+  // If insert failed and it looks like an avatar_id column issue, retry without it
+  if (createError && createError.code !== "23505") {
+    console.warn(`[Player] Insert with avatar_id failed (${createError.message}), retrying without it`);
+    const { avatar_id: _, ...payloadWithoutAvatar } = insertPayload as Record<string, unknown> & { avatar_id: unknown };
+    const retry = await supabase
+      .from("players")
+      .insert(payloadWithoutAvatar)
+      .select()
+      .single();
+    created = retry.data as Player | null;
+    createError = retry.error;
+  }
 
   if (createError) {
     // Handle race condition where another tab created the same username
