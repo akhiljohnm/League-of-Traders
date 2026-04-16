@@ -140,10 +140,20 @@ export function useActiveSymbols(): UseActiveSymbolsReturn {
   return { symbols, grouped, isLoading, error };
 }
 
+// Markets and submarkets excluded from Rise/Fall game mode
+const BLOCKED_MARKETS = new Set(["cryptocurrency"]);
+const BLOCKED_SUBMARKETS = new Set(["crash_boom"]);
+// Symbol names containing these keywords are also excluded
+const BLOCKED_NAME_KEYWORDS = [/crash/i, /boom/i];
+
 function groupByMarket(symbols: DerivActiveSymbol[]): MarketGroup[] {
   const marketMap = new Map<string, Map<string, DerivActiveSymbol[]>>();
 
   for (const sym of symbols) {
+    if (BLOCKED_MARKETS.has(sym.market)) continue;
+    if (BLOCKED_SUBMARKETS.has(sym.submarket)) continue;
+    if (BLOCKED_NAME_KEYWORDS.some((re) => re.test(sym.underlying_symbol_name))) continue;
+
     if (!marketMap.has(sym.market)) {
       marketMap.set(sym.market, new Map());
     }
@@ -155,7 +165,7 @@ function groupByMarket(symbols: DerivActiveSymbol[]): MarketGroup[] {
   }
 
   // Sort: synthetic_index first, then alphabetically
-  const marketOrder = ["synthetic_index", "forex", "commodities", "indices", "cryptocurrency"];
+  const marketOrder = ["synthetic_index", "forex", "commodities", "indices"];
 
   return Array.from(marketMap.entries())
     .sort(([a], [b]) => {

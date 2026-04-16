@@ -82,7 +82,7 @@ export default function TradingChart({
 
     const chart = createChart(node, {
       width: containerWidth,
-      height: 400,
+      height: containerHeight,
       layout: {
         background: { type: ColorType.Solid, color: "#09090B" },
         textColor: "#71717A",
@@ -156,11 +156,11 @@ export default function TradingChart({
     chartRef.current = chart;
     seriesRef.current = areaSeries;
 
-    // Setup resize observer
+    // Setup resize observer — track both width and height
     resizeObserverRef.current = new ResizeObserver((entries) => {
       if (chartRef.current && entries[0]) {
-        const { width } = entries[0].contentRect;
-        chartRef.current.applyOptions({ width });
+        const { width, height } = entries[0].contentRect;
+        chartRef.current.applyOptions({ width, height: Math.max(height, 200) });
       }
     });
     resizeObserverRef.current.observe(node);
@@ -392,30 +392,31 @@ export default function TradingChart({
   }
 
   return (
-    <div className="bg-bg-surface border border-border-default rounded-xl p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-text-primary font-bold text-sm flex items-center gap-2">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <div className="flex flex-col h-full bg-bg-surface border-b border-border-default">
+      <div className="flex items-center justify-between px-3 py-1.5 shrink-0 border-b border-border-default">
+        <h3 className="text-text-primary font-bold text-xs flex items-center gap-1.5">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
           </svg>
           LIVE CHART
         </h3>
         <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-alpha-green animate-live-pulse" />
-          <span className="text-[10px] text-text-muted uppercase tracking-wider">
+          <span className="w-1.5 h-1.5 rounded-full bg-alpha-green animate-live-pulse" />
+          <span className="text-[9px] text-text-muted uppercase tracking-wider">
             {chartData.length} TICKS
           </span>
         </div>
       </div>
-      <div
-        ref={chartContainerRef}
-        className="relative w-full overflow-hidden"
-        style={{
-          height: "400px",
-          minHeight: "400px",
-          background: "#09090B"
-        }}
-      />
+      <div className="flex-1 min-h-0">
+        <div
+          ref={chartContainerRef}
+          className="relative w-full h-full overflow-hidden"
+          style={{
+            minHeight: "200px",
+            background: "#09090B"
+          }}
+        />
+      </div>
     </div>
   );
 }

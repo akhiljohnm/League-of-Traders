@@ -14,7 +14,7 @@ import type {
   BotStrategy,
   Lobby,
 } from "@/lib/types/database";
-import { getAvatarUrl } from "@/lib/avatar";
+import { getAvatarUrl, AVATAR_IDS } from "@/lib/avatar";
 import { BOT_CATALOG } from "./BotSubscribeDialog";
 
 interface LobbyViewProps {
@@ -22,6 +22,7 @@ interface LobbyViewProps {
   currentPlayer: Player;
   onLobbyLocked: (lobbyId: string) => void;
   onGameStart: (lobbyId: string) => void;
+  onBack: () => void;
 }
 
 interface LobbySlot {
@@ -31,25 +32,50 @@ interface LobbySlot {
 
 const STRATEGY_META: Record<
   BotStrategy,
-  { label: string; tag: string; tagColor: string; icon: string }
+  {
+    label: string;
+    codename: string;
+    tag: string;
+    color: string;
+    borderColor: string;
+    bgColor: string;
+    glowColor: string;
+    desc: string;
+    stats: { aggression: number; frequency: number; winRate: string };
+  }
 > = {
   trend_follower: {
     label: "Trend Follower",
+    codename: "VANGUARD",
     tag: "LOW RISK",
-    tagColor: "bg-alpha-green/10 text-alpha-green border-alpha-green/20",
-    icon: "📈",
+    color: "#00FFA3",
+    borderColor: "border-alpha-green/30",
+    bgColor: "bg-alpha-green",
+    glowColor: "rgba(0,255,163,0.15)",
+    desc: "Rides momentum waves. Conservative entries with trend confirmation.",
+    stats: { aggression: 2, frequency: 3, winRate: "62%" },
   },
   mean_reverter: {
     label: "Mean Reverter",
+    codename: "SENTINEL",
     tag: "MED RISK",
-    tagColor: "bg-safety-cyan/10 text-safety-cyan border-safety-cyan/20",
-    icon: "🔄",
+    color: "#00E5FF",
+    borderColor: "border-safety-cyan/30",
+    bgColor: "bg-safety-cyan",
+    glowColor: "rgba(0,229,255,0.15)",
+    desc: "Fades extremes. Enters against overextended moves for snap-back profit.",
+    stats: { aggression: 3, frequency: 3, winRate: "58%" },
   },
   high_freq_gambler: {
     label: "HF Gambler",
+    codename: "BERSERKER",
     tag: "HIGH RISK",
-    tagColor: "bg-rekt-crimson/10 text-rekt-crimson border-rekt-crimson/20",
-    icon: "⚡",
+    color: "#FF3366",
+    borderColor: "border-rekt-crimson/30",
+    bgColor: "bg-rekt-crimson",
+    glowColor: "rgba(255,51,102,0.15)",
+    desc: "Maximum volume. Rapid-fire trades with aggressive position sizing.",
+    stats: { aggression: 5, frequency: 5, winRate: "51%" },
   },
 };
 
@@ -74,6 +100,7 @@ export default function LobbyView({
   currentPlayer,
   onLobbyLocked,
   onGameStart,
+  onBack,
 }: LobbyViewProps) {
   const [slots, setSlots] = useState<LobbySlot[]>([]);
   const [lobby, setLobby] = useState<Lobby | null>(null);
@@ -264,10 +291,21 @@ export default function LobbyView({
     }}>
       {/* Top bar */}
       <div className="flex items-center justify-between px-8 py-4 border-b border-border-default/50">
-        <div className="flex items-center gap-6">
-          <span className="text-safety-cyan font-bold text-lg tracking-widest uppercase font-mono-numbers">
+        <div className="flex items-center gap-5">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 text-text-muted hover:text-text-primary
+                       transition-colors cursor-pointer font-mono-numbers text-xs tracking-wider"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M8.5 3L4.5 7L8.5 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            BACK
+          </button>
+          <div className="w-px h-5 bg-border-default" />
+          <a href="/" className="text-safety-cyan font-bold text-lg tracking-widest uppercase font-mono-numbers hover:brightness-125 transition-all">
             LEAGUE OF TRADERS
-          </span>
+          </a>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-mono-numbers font-bold px-2 py-1 rounded border bg-safety-cyan/10 text-safety-cyan border-safety-cyan/30 tracking-widest">
               CO-OP PvE
@@ -282,12 +320,15 @@ export default function LobbyView({
               ${playerBalance.toLocaleString()}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-sm">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity cursor-pointer"
+          >
             <span className="text-text-muted">Market:</span>
             <span className="font-mono-numbers text-safety-cyan font-bold">
               {lobby?.symbol ?? "—"}
             </span>
-          </div>
+          </button>
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${isLocked ? "bg-alpha-green" : "bg-safety-cyan animate-live-pulse"}`} />
             <span className={`text-xs font-mono-numbers font-bold tracking-widest ${isLocked ? "text-alpha-green" : "text-safety-cyan"}`}>
@@ -298,7 +339,7 @@ export default function LobbyView({
       </div>
 
       {/* Main arena */}
-      <div className="flex-1 flex flex-col items-center justify-start px-8 pt-10 pb-8">
+      <div className="flex-1 flex flex-col items-center justify-center px-8 py-8">
         {/* VS divider label */}
         <div className="mb-8 text-center">
           <h2 className="text-text-muted text-sm font-bold tracking-[0.3em] uppercase mb-1">
@@ -341,7 +382,12 @@ export default function LobbyView({
                   );
                 }
                 return (
-                  <EmptyPortraitSlot key={`empty-${i}`} index={i + 1} displayPosition={i} />
+                  <EmptyPortraitSlot
+                    key={`empty-${i}`}
+                    index={i + 1}
+                    displayPosition={i}
+                    onClick={!isLocked ? () => setShowBotMenu(!showBotMenu) : undefined}
+                  />
                 );
               })}
             </div>
@@ -356,105 +402,239 @@ export default function LobbyView({
         )}
 
         {/* Bottom action zone */}
-        <div className="flex flex-col items-center gap-4 w-full max-w-2xl">
-          {/* Hire Bot + Start Game row */}
-          <div className="flex items-center gap-4 w-full">
-            {/* Hire bot button */}
-            {!isLocked && emptySlots > 0 && (
-              <div className="relative flex-1">
-                <button
-                  onClick={() => setShowBotMenu(!showBotMenu)}
-                  disabled={isHiring}
-                  className="w-full py-3 px-4 bg-bg-surface border border-border-hover rounded-xl
-                             text-text-secondary text-sm font-bold tracking-widest uppercase
-                             hover:border-safety-cyan/50 hover:text-safety-cyan transition-all
-                             disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                  style={showBotMenu ? { borderColor: "rgba(0,229,255,0.4)", color: "#00E5FF" } : {}}
-                >
-                  {isHiring ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <span className="w-3 h-3 border-2 border-safety-cyan/40 border-t-safety-cyan rounded-full animate-spin" />
-                      Hiring...
-                    </span>
-                  ) : (
-                    "+ Hire Mercenary"
-                  )}
-                </button>
+        <div className="flex flex-col items-center gap-4 w-full max-w-3xl">
 
-                {/* Bot strategy dropdown */}
-                {showBotMenu && (
-                  <div className="absolute bottom-full mb-2 left-0 right-0 z-20 bg-bg-surface border border-safety-cyan/20 rounded-xl p-3 shadow-2xl"
-                    style={{ boxShadow: "0 0 30px rgba(0,229,255,0.1)" }}
-                  >
-                    <p className="text-text-muted text-xs mb-3 text-center tracking-wider">
-                      SELECT MERCENARY PROFILE — costs{" "}
-                      <span className="font-mono-numbers text-text-secondary">${buyIn.toLocaleString()}</span>
-                    </p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(Object.entries(STRATEGY_META) as [BotStrategy, typeof STRATEGY_META[BotStrategy]][]).map(
-                        ([strategy, meta]) => (
-                          <button
-                            key={strategy}
-                            onClick={() => handleHireBot(strategy)}
-                            disabled={isHiring}
-                            className="flex flex-col items-center gap-1.5 bg-bg-elevated border border-alpha-green/30
-                                       rounded-lg p-3 hover:border-alpha-green/60 transition-colors cursor-pointer
-                                       disabled:opacity-40"
-                          >
-                            <span className="text-2xl">{meta.icon}</span>
-                            <span className="text-text-primary text-xs font-semibold text-center leading-tight">
-                              {meta.label}
+          {/* ——— MERCENARY DEPLOYMENT DIALOG (overlay) ——— */}
+          {!isLocked && emptySlots > 0 && showBotMenu && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              {/* Backdrop */}
+              <div
+                className="absolute inset-0 bg-bg-primary/80 backdrop-blur-sm"
+                onClick={() => setShowBotMenu(false)}
+              />
+
+              {/* Dialog */}
+              <div className="relative w-full max-w-3xl mx-4 terminal-panel bg-bg-surface border border-border-default rounded-lg
+                              overflow-hidden panel-scanline animate-fade-up"
+                style={{ boxShadow: "0 0 60px rgba(0,229,255,0.08), 0 0 120px rgba(0,0,0,0.5)" }}
+              >
+                {/* Panel header */}
+                <div className="flex items-center justify-between px-5 py-3 border-b border-border-default bg-bg-primary/50">
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono-numbers text-safety-cyan text-[10px] font-bold
+                                     bg-safety-cyan/10 px-2 py-0.5 rounded tracking-widest">
+                      DEPLOY
+                    </span>
+                    <span className="font-display text-sm font-bold text-text-primary uppercase tracking-wider">
+                      Mercenary Selection
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono-numbers text-text-muted text-[10px]">
+                      COST: <span className="text-safety-cyan">${buyIn.toLocaleString()}</span> / UNIT
+                    </span>
+                    <button
+                      onClick={() => setShowBotMenu(false)}
+                      className="text-text-muted hover:text-text-primary transition-colors cursor-pointer
+                                 font-mono-numbers text-xs"
+                    >
+                      [ESC]
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bot cards */}
+                <div className="p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {(Object.entries(STRATEGY_META) as [BotStrategy, typeof STRATEGY_META[BotStrategy]][]).map(
+                      ([strategy, meta]) => (
+                        <button
+                          key={strategy}
+                          onClick={() => handleHireBot(strategy)}
+                          disabled={isHiring}
+                          className={`group relative bg-bg-primary border ${meta.borderColor} rounded-lg
+                                     p-4 text-left transition-all cursor-pointer
+                                     disabled:opacity-40 disabled:cursor-not-allowed
+                                     hover:border-opacity-60`}
+                          style={{
+                            boxShadow: `0 0 0 0 ${meta.glowColor}`,
+                            transition: "all 0.25s ease",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.boxShadow = `0 0 24px ${meta.glowColor}, 0 0 60px ${meta.glowColor.replace("0.15", "0.06")}`;
+                            e.currentTarget.style.borderColor = meta.color + "60";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.boxShadow = `0 0 0 0 ${meta.glowColor}`;
+                            e.currentTarget.style.borderColor = "";
+                          }}
+                        >
+                          {/* Top accent line */}
+                          <div className="absolute top-0 left-4 right-4 h-[1px]"
+                            style={{ background: `linear-gradient(90deg, transparent, ${meta.color}40, transparent)` }} />
+
+                          {/* Codename + risk tag row */}
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="font-mono-numbers text-[10px] font-bold tracking-[0.2em]"
+                              style={{ color: meta.color }}>
+                              {meta.codename}
                             </span>
-                            <span className={`text-[9px] font-mono-numbers font-bold px-1.5 py-0.5 rounded border ${meta.tagColor}`}>
+                            <span className="font-mono-numbers text-[8px] font-bold px-1.5 py-0.5 rounded
+                                            border tracking-wider"
+                              style={{
+                                color: meta.color,
+                                borderColor: meta.color + "30",
+                                backgroundColor: meta.color + "10",
+                              }}>
                               {meta.tag}
                             </span>
-                            <span className="text-[9px] text-alpha-green font-mono-numbers bg-alpha-green/10 px-1 py-0.5 rounded">
-                              DEPLOY
+                          </div>
+
+                          {/* Strategy name */}
+                          <span className="text-text-primary text-sm font-semibold block mb-1">
+                            {meta.label}
+                          </span>
+
+                          {/* Description */}
+                          <p className="text-text-muted text-[11px] leading-relaxed mb-3">
+                            {meta.desc}
+                          </p>
+
+                          {/* Stats bars */}
+                          <div className="space-y-1.5 mb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono-numbers text-[9px] text-text-muted w-10">AGR</span>
+                              <div className="flex-1 h-1 bg-bg-elevated rounded-full overflow-hidden">
+                                <div className="h-full rounded-full" style={{
+                                  width: `${meta.stats.aggression * 20}%`,
+                                  backgroundColor: meta.color,
+                                  opacity: 0.7,
+                                }} />
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono-numbers text-[9px] text-text-muted w-10">FRQ</span>
+                              <div className="flex-1 h-1 bg-bg-elevated rounded-full overflow-hidden">
+                                <div className="h-full rounded-full" style={{
+                                  width: `${meta.stats.frequency * 20}%`,
+                                  backgroundColor: meta.color,
+                                  opacity: 0.7,
+                                }} />
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono-numbers text-[9px] text-text-muted w-10">WIN</span>
+                              <span className="font-mono-numbers text-[10px] font-bold"
+                                style={{ color: meta.color }}>
+                                {meta.stats.winRate}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Deploy button */}
+                          <div className="flex items-center justify-center gap-2 py-2 rounded border
+                                         transition-all group-hover:brightness-110"
+                            style={{
+                              borderColor: meta.color + "30",
+                              backgroundColor: meta.color + "08",
+                            }}>
+                            {isHiring ? (
+                              <span className="w-3 h-3 border-2 rounded-full animate-spin"
+                                style={{ borderColor: meta.color + "40", borderTopColor: meta.color }} />
+                            ) : (
+                              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ color: meta.color }}>
+                                <path d="M6 1L11 6L6 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                <path d="M1 6H10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                              </svg>
+                            )}
+                            <span className="font-mono-numbers text-[10px] font-bold tracking-[0.2em]"
+                              style={{ color: meta.color }}>
+                              {isHiring ? "DEPLOYING" : "DEPLOY"}
                             </span>
-                          </button>
-                        )
-                      )}
-                    </div>
+                          </div>
+                        </button>
+                      )
+                    )}
                   </div>
-                )}
+
+                  {/* Slots remaining indicator */}
+                  <div className="flex items-center justify-center gap-2 mt-3 pt-3 border-t border-border-default/50">
+                    <span className="font-mono-numbers text-text-muted text-[10px]">
+                      {emptySlots} SLOT{emptySlots !== 1 ? "S" : ""} REMAINING
+                    </span>
+                    <span className="mx-1 text-border-hover">|</span>
+                    <span className="font-mono-numbers text-text-muted text-[10px]">
+                      BALANCE AFTER: <span className="text-alpha-green">
+                        ${(playerBalance - buyIn).toLocaleString()}
+                      </span>
+                    </span>
+                  </div>
+                </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Start Game / waiting */}
-            {canStart && (
-              <button
-                onClick={handleStartGame}
-                disabled={isStarting}
-                className="flex-1 py-3 px-6 bg-alpha-green text-bg-primary font-bold text-sm
-                           tracking-widest uppercase rounded-xl cursor-pointer
-                           disabled:opacity-40 disabled:cursor-not-allowed transition-all
-                           hover:brightness-110 active:scale-[0.98]"
-                style={{ boxShadow: "0 0 25px rgba(0, 255, 163, 0.35), 0 0 60px rgba(0, 255, 163, 0.1)" }}
-              >
-                {isStarting ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="w-3 h-3 border-2 border-bg-primary/40 border-t-bg-primary rounded-full animate-spin" />
-                    Starting...
-                  </span>
-                ) : (
-                  `Start Game — ${slots.length} Player${slots.length !== 1 ? "s" : ""}`
-                )}
-              </button>
-            )}
+          {/* ——— HIRE BUTTON (when panel is closed) ——— */}
+          {!isLocked && emptySlots > 0 && !showBotMenu && (
+            <button
+              onClick={() => setShowBotMenu(true)}
+              disabled={isHiring}
+              className="w-full py-3 px-4 bg-bg-surface border border-border-hover rounded-lg
+                         text-text-secondary text-sm font-bold tracking-widest uppercase
+                         hover:border-safety-cyan/40 hover:text-safety-cyan transition-all
+                         disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer
+                         font-mono-numbers"
+            >
+              {isHiring ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-3 h-3 border-2 border-safety-cyan/40 border-t-safety-cyan rounded-full animate-spin" />
+                  DEPLOYING...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="opacity-60">
+                    <path d="M7 3V11M3 7H11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  HIRE MERCENARY
+                </span>
+              )}
+            </button>
+          )}
 
-            {isLocked && isOwner && (
-              <button
-                onClick={handleStartGame}
-                disabled={isStarting}
-                className="flex-1 py-3 px-6 bg-alpha-green text-bg-primary font-bold text-sm
-                           tracking-widest uppercase rounded-xl cursor-pointer
-                           disabled:opacity-40 transition-all hover:brightness-110 active:scale-[0.98]"
-                style={{ boxShadow: "0 0 25px rgba(0, 255, 163, 0.35)" }}
-              >
-                {isStarting ? "Starting..." : "START GAME"}
-              </button>
-            )}
-          </div>
+          {/* ——— START GAME ——— */}
+          {canStart && (
+            <button
+              onClick={handleStartGame}
+              disabled={isStarting}
+              className="w-full py-3 px-6 bg-alpha-green text-bg-primary font-bold text-sm
+                         tracking-widest uppercase rounded-lg cursor-pointer font-display
+                         disabled:opacity-40 disabled:cursor-not-allowed transition-all
+                         hover:brightness-110 active:scale-[0.98]"
+              style={{ boxShadow: "0 0 25px rgba(0, 255, 163, 0.35), 0 0 60px rgba(0, 255, 163, 0.1)" }}
+            >
+              {isStarting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-3 h-3 border-2 border-bg-primary/40 border-t-bg-primary rounded-full animate-spin" />
+                  Starting...
+                </span>
+              ) : (
+                `Start Game — ${slots.length} Player${slots.length !== 1 ? "s" : ""}`
+              )}
+            </button>
+          )}
+
+          {isLocked && isOwner && (
+            <button
+              onClick={handleStartGame}
+              disabled={isStarting}
+              className="w-full py-3 px-6 bg-alpha-green text-bg-primary font-bold text-sm
+                         tracking-widest uppercase rounded-lg cursor-pointer font-display
+                         disabled:opacity-40 transition-all hover:brightness-110 active:scale-[0.98]"
+              style={{ boxShadow: "0 0 25px rgba(0, 255, 163, 0.35)" }}
+            >
+              {isStarting ? "Starting..." : "START GAME"}
+            </button>
+          )}
 
           {/* Status line */}
           <div className="flex items-center justify-center gap-3 text-xs text-text-muted">
@@ -492,12 +672,12 @@ export default function LobbyView({
 
 // ── Banner SVG constants (shared between PortraitSlot and EmptyPortraitSlot) ──
 const BW = 160;         // SVG viewBox width
-const BH = 300;         // SVG viewBox height
-const BCUT = 20;        // corner cut size (45° chamfer)
+const BH = 250;         // SVG viewBox height (compact)
+const BCUT = 16;        // corner cut size (45° chamfer)
 const BBODY_TOP = 0;    // banner cloth body starts at top of SVG
-const BRING_CY = 62;    // profile ring centre Y — well inside the banner body
-const BRING_R = 36;     // avatar clip radius (inner)
-const BRING_OUTER = 44; // outer gold ring border radius (ring top at y=18, fully inside)
+const BRING_CY = 55;    // profile ring centre Y
+const BRING_R = 32;     // avatar clip radius (inner)
+const BRING_OUTER = 38; // outer gold ring border radius
 
 // Per-position depth scale & opacity (index 0=left-outer … 4=right-outer, 2=center)
 const BANNER_SCALES  = [0.82, 0.92, 1.0, 0.92, 0.82];
@@ -547,7 +727,7 @@ function PortraitSlot({
   const uid = `p${player.id.replace(/-/g, "").slice(0, 10)}`;
   const body = makeBannerPath(0);
   const innerBody = makeBannerPath(5);
-  const NP_TOP = BH - 46;
+  const NP_TOP = BRING_CY + BRING_OUTER + 8;
   // Badge row starts just below the ring
   const BADGE_Y = BRING_CY + BRING_OUTER + 10;
 
@@ -641,9 +821,9 @@ function PortraitSlot({
             stroke={factionColor} strokeWidth="1" strokeOpacity="0.45"
           />
 
-          {/* ── 6. Nameplate text ── */}
+          {/* ── 6. Nameplate text (centered in nameplate area) ── */}
           <text
-            x={BW / 2} y={NP_TOP + 17}
+            x={BW / 2} y={NP_TOP + 20}
             textAnchor="middle" fill={factionColor}
             fontSize="9.5" fontWeight="bold" letterSpacing="1.5"
             fontFamily="'JetBrains Mono', 'Roboto Mono', monospace"
@@ -651,7 +831,7 @@ function PortraitSlot({
             {displayName.toUpperCase()}
           </text>
           <text
-            x={BW / 2} y={NP_TOP + 32}
+            x={BW / 2} y={NP_TOP + 34}
             textAnchor="middle" fill={factionColor} fillOpacity="0.4"
             fontSize="7" letterSpacing="2"
             fontFamily="'JetBrains Mono', 'Roboto Mono', monospace"
@@ -694,11 +874,11 @@ function PortraitSlot({
             fill="none" stroke={`url(#gold-${uid})`} strokeWidth="1.1" strokeOpacity="0.55"
           />
 
-          {/* ── 12. Status badges (below the ring overlap zone) ── */}
+          {/* ── 12. Status badges (centered at bottom of banner) ── */}
           {isOwner && (
             <g>
-              <rect x={6} y={BADGE_Y} rx="2" width={32} height={13} fill="#00FFA3" />
-              <text x={22} y={BADGE_Y + 10} textAnchor="middle"
+              <rect x={BW / 2 - 16} y={BH - BCUT - 18} rx="2" width={32} height={13} fill="#00FFA3" />
+              <text x={BW / 2} y={BH - BCUT - 8} textAnchor="middle"
                 fontSize="7.5" fontWeight="bold" fontFamily="monospace" fill="#09090b" letterSpacing="0.5">
                 HOST
               </text>
@@ -706,8 +886,8 @@ function PortraitSlot({
           )}
           {isCurrentPlayer && !isOwner && (
             <g>
-              <rect x={6} y={BADGE_Y} rx="2" width={26} height={13} fill="#00E5FF" />
-              <text x={19} y={BADGE_Y + 10} textAnchor="middle"
+              <rect x={BW / 2 - 13} y={BH - BCUT - 18} rx="2" width={26} height={13} fill="#00E5FF" />
+              <text x={BW / 2} y={BH - BCUT - 8} textAnchor="middle"
                 fontSize="7.5" fontWeight="bold" fontFamily="monospace" fill="#09090b" letterSpacing="0.5">
                 YOU
               </text>
@@ -715,9 +895,9 @@ function PortraitSlot({
           )}
           {player.is_bot && (
             <g>
-              <rect x={6} y={BADGE_Y + (isOwner ? 16 : 0)} rx="2" width={26} height={13}
+              <rect x={BW / 2 - 13} y={BH - BCUT - (isOwner ? 34 : 18)} rx="2" width={26} height={13}
                 fill="#A855F7" fillOpacity="0.9" />
-              <text x={19} y={BADGE_Y + (isOwner ? 26 : 10)} textAnchor="middle"
+              <text x={BW / 2} y={BH - BCUT - (isOwner ? 24 : 8)} textAnchor="middle"
                 fontSize="7.5" fontWeight="bold" fontFamily="monospace" fill="white" letterSpacing="0.5">
                 BOT
               </text>
@@ -729,40 +909,14 @@ function PortraitSlot({
           <circle cx={BW / 2} cy={BRING_CY} r={BRING_OUTER}
             fill="#0d0d11" />
 
-          {/* Avatar image / bot icon / initials clipped to inner circle */}
-          {player.avatar_id && !player.is_bot ? (
-            <image
-              href={getAvatarUrl(player.avatar_id)}
-              x={BW / 2 - BRING_R} y={BRING_CY - BRING_R}
-              width={BRING_R * 2} height={BRING_R * 2}
-              preserveAspectRatio="xMidYMid slice"
-              clipPath={`url(#ring-clip-${uid})`}
-            />
-          ) : (
-            <g clipPath={`url(#ring-clip-${uid})`}>
-              <circle cx={BW / 2} cy={BRING_CY} r={BRING_R}
-                fill={`${factionColor}20`} />
-              {player.is_bot ? (
-                <g transform={`translate(${BW / 2 - 13}, ${BRING_CY - 13})`}
-                  stroke={factionColor} fill="none" strokeWidth="1.8">
-                  <rect x="0" y="7" width="26" height="17" rx="2" />
-                  <circle cx="13" cy="3" r="3" />
-                  <line x1="13" y1="6" x2="13" y2="7" />
-                  <circle cx="8"  cy="15.5" r="2" fill={factionColor} stroke="none" />
-                  <circle cx="18" cy="15.5" r="2" fill={factionColor} stroke="none" />
-                </g>
-              ) : (
-                <text
-                  x={BW / 2} y={BRING_CY + 9}
-                  textAnchor="middle" fill={factionColor}
-                  fontSize="24" fontWeight="900"
-                  fontFamily="'JetBrains Mono', 'Roboto Mono', monospace"
-                >
-                  {player.username.slice(0, 2).toUpperCase()}
-                </text>
-              )}
-            </g>
-          )}
+          {/* Avatar image clipped to inner circle — deterministic fallback for all players */}
+          <image
+            href={getAvatarUrl(player.avatar_id ?? AVATAR_IDS[Math.abs(player.id.charCodeAt(0)) % AVATAR_IDS.length])}
+            x={BW / 2 - BRING_R} y={BRING_CY - BRING_R}
+            width={BRING_R * 2} height={BRING_R * 2}
+            preserveAspectRatio="xMidYMid slice"
+            clipPath={`url(#ring-clip-${uid})`}
+          />
 
           {/* Gold outer ring border */}
           <circle cx={BW / 2} cy={BRING_CY} r={BRING_OUTER}
@@ -776,13 +930,14 @@ function PortraitSlot({
   );
 }
 
-function EmptyPortraitSlot({ index, displayPosition }: { index: number; displayPosition: number }) {
+function EmptyPortraitSlot({ index, displayPosition, onClick }: { index: number; displayPosition: number; onClick?: () => void }) {
   const body = makeBannerPath(0);
   const scale   = BANNER_SCALES[displayPosition]  ?? 1.0;
   const opacity = (BANNER_OPACITY[displayPosition] ?? 1.0) * 0.4;
 
   return (
-    <div className="flex flex-col items-center flex-1"
+    <div className={`flex flex-col items-center flex-1 ${onClick ? "cursor-pointer" : ""}`}
+      onClick={onClick}
       style={{ transform: `scale(${scale})`, opacity, transformOrigin: "50% 100%", transition: "transform 0.3s ease, opacity 0.3s ease" }}>
       <div
         className="relative w-full"
@@ -796,8 +951,8 @@ function EmptyPortraitSlot({ index, displayPosition }: { index: number; displayP
         >
           <defs>
             <linearGradient id={`empty-bg-${index}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stopColor="#1a1a20" />
-              <stop offset="100%" stopColor="#0e0e12" />
+              <stop offset="0%"   stopColor="#22222a" />
+              <stop offset="100%" stopColor="#18181f" />
             </linearGradient>
           </defs>
 
@@ -806,32 +961,32 @@ function EmptyPortraitSlot({ index, displayPosition }: { index: number; displayP
 
           {/* Dashed border */}
           <path d={body} fill="none"
-            stroke="rgba(255,255,255,0.1)" strokeWidth="1.5" strokeDasharray="5 4" />
+            stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeDasharray="5 4" />
 
           {/* Slot number */}
           <text x={8} y={BCUT + 20}
-            fill="rgba(255,255,255,0.1)" fontSize="10"
+            fill="rgba(255,255,255,0.2)" fontSize="10"
             fontFamily="monospace" fontWeight="bold">
             {index.toString().padStart(2, "0")}
           </text>
 
           {/* "Open slot" label */}
-          <text x={BW / 2} y={BH - 16}
-            textAnchor="middle" fill="rgba(255,255,255,0.2)"
+          <text x={BW / 2} y={BH - BCUT - 8}
+            textAnchor="middle" fill="rgba(255,255,255,0.35)"
             fontSize="8" fontFamily="monospace" letterSpacing="2">
             OPEN SLOT
           </text>
 
           {/* Dim ring (dashed, no avatar) */}
           <circle cx={BW / 2} cy={BRING_CY} r={BRING_OUTER}
-            fill="#0e0e12" stroke="rgba(255,255,255,0.1)"
+            fill="#1a1a22" stroke="rgba(255,255,255,0.2)"
             strokeWidth="1.5" strokeDasharray="5 4" />
           {/* Silhouette icon inside ring */}
           <circle cx={BW / 2} cy={BRING_CY - 6} r={10}
-            fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.2" />
+            fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.2" />
           <path
             d={`M ${BW/2 - 14},${BRING_CY + 18} A 14,10 0 0,1 ${BW/2 + 14},${BRING_CY + 18}`}
-            fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.2"
+            fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.2"
           />
         </svg>
       </div>

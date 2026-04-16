@@ -5,7 +5,7 @@ import { getOrCreatePlayer, getPlayerById } from "@/lib/actions/player";
 import { findOrCreateLobby, joinLobby, getLobbyPlayers, getLobby } from "@/lib/actions/lobby";
 import type { Player, Lobby, LobbyPlayer } from "@/lib/types/database";
 import type { DerivActiveSymbol } from "@/lib/types/deriv";
-import { getOrAssignAvatar, syncAvatarCookie, getAvatarUrl } from "@/lib/avatar";
+import { getOrAssignAvatar, syncAvatarCookie, getAvatarUrl, AVATAR_IDS } from "@/lib/avatar";
 import { useActiveSymbols, getMarketLabel, getSubmarketLabel } from "@/hooks/useActiveSymbols";
 import type { PayoutSummary } from "@/lib/game/payout-engine";
 import Navbar from "@/components/Navbar";
@@ -115,9 +115,9 @@ export default function PlayPage() {
 
   return (
     <main className="min-h-screen bg-bg-primary">
-      {phase !== "game" && phase !== "post-game" && <Navbar />}
+      {phase === "login" && <Navbar />}
 
-      <div className={`${phase === "game" || phase === "post-game" ? "pt-6" : phase === "login" ? "pt-16" : "pt-24"} pb-16 px-6`}>
+      <div className={`${phase === "market-select" || phase === "lobby" || phase === "game" || phase === "post-game" ? "" : phase === "matchmaking" ? "pt-6 pb-16 px-6" : "pt-16 pb-16 px-6"}`}>
         {phase === "login" && (
           <div className="animate-fade-up">
             <UsernameForm
@@ -167,6 +167,7 @@ export default function PlayPage() {
               currentPlayer={player}
               onLobbyLocked={handleLobbyLocked}
               onGameStart={handleGameStart}
+              onBack={handleExitGame}
             />
           </div>
         )}
@@ -220,6 +221,14 @@ export default function PlayPage() {
 }
 /* ===================== MARKET SELECTOR ===================== */
 
+const TIER_CONFIG: Record<string, { label: string; risk: string; color: string }> = {
+  "100": { label: "CADET", risk: "LOW", color: "text-text-secondary" },
+  "500": { label: "SCOUT", risk: "LOW", color: "text-text-secondary" },
+  "1000": { label: "STANDARD", risk: "MED", color: "text-safety-cyan" },
+  "5000": { label: "VETERAN", risk: "HIGH", color: "text-alpha-green" },
+  "10000": { label: "APEX", risk: "MAX", color: "text-rekt-crimson" },
+};
+
 function MarketSelector({
   player,
   buyInOptions,
@@ -237,276 +246,408 @@ function MarketSelector({
 }) {
   const { grouped, isLoading: marketsLoading, error: marketsError } = useActiveSymbols();
   const [selectedSymbol, setSelectedSymbol] = useState<DerivActiveSymbol | null>(null);
-  const [selectedBuyIn, setSelectedBuyIn] = useState<number | null>(null);
+  const [selectedBuyIn, setSelectedBuyIn] = useState<number | null>(1_000);
   const [expandedMarket, setExpandedMarket] = useState<string | null>(null);
+  const [hasAutoExpanded, setHasAutoExpanded] = useState(false);
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
-  // Auto-expand the first market group
+  // Auto-expand the first market group only once on initial load
   useEffect(() => {
-    if (grouped.length > 0 && !expandedMarket) {
+    if (grouped.length > 0 && !hasAutoExpanded) {
       setExpandedMarket(grouped[0].market);
+      setHasAutoExpanded(true);
     }
-  }, [grouped, expandedMarket]);
+  }, [grouped, hasAutoExpanded]);
+
+  // Auto-select default symbol (1HZ10V) once markets load
+  useEffect(() => {
+    if (grouped.length > 0 && !hasAutoSelected) {
+      for (const group of grouped) {
+        for (const sub of group.submarkets) {
+          const match = sub.symbols.find((s) => s.underlying_symbol === "1HZ10V");
+          if (match) {
+            setSelectedSymbol(match);
+            setExpandedMarket(group.market);
+            setHasAutoSelected(true);
+            return;
+          }
+        }
+      }
+    }
+  }, [grouped, hasAutoSelected]);
 
   const canSearch = selectedSymbol !== null && selectedBuyIn !== null && !isLoading;
+  const totalInstruments = grouped.reduce(
+    (acc, g) => acc + g.submarkets.reduce((n, s) => n + s.symbols.length, 0),
+    0
+  );
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      {/* Player header */}
-      <div className="bg-bg-surface border border-border-default rounded-2xl p-6 mb-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full overflow-hidden border border-safety-cyan/30 shrink-0">
-              {player.avatar_id ? (
-                <img
-                  src={getAvatarUrl(player.avatar_id)}
-                  alt={player.username}
-                  className="w-full h-full object-cover object-top"
-                />
-              ) : (
-                <div className="w-full h-full bg-safety-cyan/10 flex items-center justify-center">
-                  <span className="text-safety-cyan font-bold text-sm">
-                    {player.username.slice(0, 2).toUpperCase()}
-                  </span>
-                </div>
-              )}
-            </div>
-            <div>
-              <span className="text-text-primary font-semibold text-sm block">
-                {player.username}
-              </span>
-              <span className="font-mono-numbers text-alpha-green text-xs">
-                ${player.game_token_balance.toLocaleString()}
-              </span>
-            </div>
+    <div className="min-h-screen bg-bg-primary flex flex-col" style={{
+      background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,229,255,0.06) 0%, #09090B 60%)",
+    }}>
+
+      {/* ——— TOP BAR (full-width, matches lobby style) ——— */}
+      <div className="flex items-center justify-between px-8 py-4 border-b border-border-default/50">
+        <div className="flex items-center gap-6">
+          <a href="/" className="text-safety-cyan font-bold text-lg tracking-widest uppercase font-mono-numbers hover:brightness-125 transition-all">
+            LEAGUE OF TRADERS
+          </a>
+        </div>
+
+        <div className="flex items-center gap-5">
+          {/* Player info inline */}
+          <div className="flex items-center gap-2">
+            <img
+              src={getAvatarUrl(player.avatar_id ?? AVATAR_IDS[Math.abs(player.id.charCodeAt(0)) % AVATAR_IDS.length])}
+              alt={player.username}
+              className="w-7 h-7 rounded-full object-cover object-top border border-safety-cyan/30 shrink-0"
+            />
+            <span className="text-text-primary font-semibold text-sm hidden sm:block">
+              {player.username}
+            </span>
           </div>
+
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-text-muted">Balance:</span>
+            <span className="font-mono-numbers text-alpha-green font-bold">
+              ${player.game_token_balance.toLocaleString()}
+            </span>
+          </div>
+
           <button
             onClick={onLogout}
-            className="text-text-muted text-xs hover:text-text-secondary transition-colors cursor-pointer"
+            className="text-text-muted text-xs hover:text-rekt-crimson transition-colors
+                       cursor-pointer font-mono-numbers tracking-wider"
           >
-            Switch Player
+            [LOGOUT]
           </button>
         </div>
       </div>
 
-      {/* Step 1: Market Selection */}
-      <div className="bg-bg-surface border border-border-default rounded-2xl p-6 mb-6">
-        <div className="flex items-center gap-3 mb-1">
-          <span className="font-mono-numbers text-safety-cyan text-sm font-bold">01</span>
-          <h2 className="text-lg font-bold text-text-primary">Choose Your Market</h2>
+      {/* ——— CONTENT AREA ——— */}
+      <div className="flex-1 px-6 py-6">
+        <div className="w-full max-w-3xl mx-auto">
+
+      {/* ——— SECTION: MARKET SELECTION ——— */}
+      <div className="terminal-panel bg-bg-surface border border-border-default rounded-lg mb-5
+                       overflow-hidden relative panel-scanline">
+        {/* Header bar */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-border-default
+                        bg-bg-primary/50">
+          <div className="flex items-center gap-3">
+            <span className="font-mono-numbers text-safety-cyan text-xs font-bold
+                             bg-safety-cyan/10 px-2 py-0.5 rounded">01</span>
+            <h2 className="font-display text-base font-bold text-text-primary uppercase tracking-wider">
+              Select Market
+            </h2>
+          </div>
+          <div className="flex items-center gap-3">
+            {!marketsLoading && !marketsError && (
+              <>
+                <span className="font-mono-numbers text-text-muted text-[10px]">
+                  {totalInstruments} INSTRUMENTS
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-alpha-green animate-live-pulse" />
+                <span className="font-mono-numbers text-alpha-green text-[10px]">LIVE</span>
+              </>
+            )}
+          </div>
         </div>
-        <p className="text-text-muted text-sm mb-5 ml-8">
-          Select an instrument to trade during the match.
-        </p>
 
-        {marketsLoading && (
-          <div className="flex items-center justify-center py-8 gap-3">
-            <div className="w-5 h-5 border-2 border-safety-cyan border-t-transparent rounded-full animate-spin" />
-            <span className="text-text-secondary text-sm">Loading markets from Deriv API...</span>
-          </div>
-        )}
+        {/* Content area */}
+        <div className="px-5 py-4">
+          {marketsLoading && (
+            <div className="flex items-center justify-center py-12 gap-3">
+              <div className="relative">
+                <div className="w-8 h-8 border border-safety-cyan/20 rounded-full" />
+                <div className="absolute inset-0 w-8 h-8 border border-safety-cyan
+                                border-t-transparent rounded-full animate-spin" />
+              </div>
+              <div>
+                <span className="text-text-secondary text-sm block">Connecting to Deriv Oracle...</span>
+                <span className="font-mono-numbers text-text-muted text-[10px]">
+                  FETCHING ACTIVE_SYMBOLS
+                </span>
+              </div>
+            </div>
+          )}
 
-        {marketsError && (
-          <div className="bg-rekt-crimson/10 border border-rekt-crimson/30 rounded-lg px-4 py-3">
-            <p className="text-rekt-crimson text-sm">{marketsError}</p>
-          </div>
-        )}
+          {marketsError && (
+            <div className="bg-rekt-crimson/5 border border-rekt-crimson/20 rounded-lg px-4 py-3
+                            flex items-center gap-3">
+              <span className="w-2 h-2 rounded-full bg-rekt-crimson shrink-0" />
+              <p className="text-rekt-crimson text-sm font-mono-numbers">{marketsError}</p>
+            </div>
+          )}
 
-        {!marketsLoading && !marketsError && (
-          <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-            {grouped.map((group) => (
-              <div key={group.market}>
-                {/* Market category header */}
-                <button
-                  onClick={() =>
-                    setExpandedMarket(
-                      expandedMarket === group.market ? null : group.market
-                    )
-                  }
-                  className="w-full flex items-center justify-between px-4 py-3 bg-bg-primary
-                             border border-border-default rounded-lg hover:border-border-hover
-                             transition-colors cursor-pointer"
-                >
-                  <span className="text-text-primary font-semibold text-sm">
-                    {getMarketLabel(group.market)}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-text-muted text-xs font-mono-numbers">
-                      {group.submarkets.reduce((n, s) => n + s.symbols.length, 0)} instruments
-                    </span>
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 12 12"
-                      className={`text-text-muted transition-transform ${
-                        expandedMarket === group.market ? "rotate-180" : ""
+          {!marketsLoading && !marketsError && (
+            <div className="space-y-1 max-h-[420px] overflow-y-auto pr-1">
+              {grouped.map((group) => {
+                const isExpanded = expandedMarket === group.market;
+                const symbolCount = group.submarkets.reduce(
+                  (n, s) => n + s.symbols.length,
+                  0
+                );
+
+                return (
+                  <div key={group.market}>
+                    {/* Market group accordion */}
+                    <button
+                      onClick={() =>
+                        setExpandedMarket(isExpanded ? null : group.market)
+                      }
+                      className={`w-full flex items-center justify-between px-4 py-3
+                                  border rounded-lg transition-all cursor-pointer group ${
+                        isExpanded
+                          ? "bg-bg-primary border-safety-cyan/20 shadow-[0_0_12px_rgba(0,229,255,0.06)]"
+                          : "bg-bg-primary/60 border-border-default hover:border-border-hover"
                       }`}
                     >
-                      <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                    </svg>
-                  </div>
-                </button>
-
-                {/* Expanded submarkets + symbols */}
-                {expandedMarket === group.market && (
-                  <div className="mt-1 ml-4 space-y-2">
-                    {group.submarkets.map((sub) => (
-                      <div key={sub.submarket}>
-                        <span className="text-text-muted text-xs uppercase tracking-wider px-2 block mb-1">
-                          {getSubmarketLabel(sub.submarket)}
+                      <div className="flex items-center gap-3">
+                        {/* Accent bar */}
+                        <span className={`w-1 h-5 rounded-full transition-colors ${
+                          isExpanded ? "bg-safety-cyan" : "bg-border-hover group-hover:bg-safety-cyan/40"
+                        }`} />
+                        <span className={`font-display text-sm font-bold uppercase tracking-wider ${
+                          isExpanded ? "text-safety-cyan" : "text-text-primary"
+                        }`}>
+                          {getMarketLabel(group.market)}
                         </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                          {sub.symbols.map((sym) => {
-                            const isSelected =
-                              selectedSymbol?.underlying_symbol === sym.underlying_symbol;
-                            return (
-                              <button
-                                key={sym.underlying_symbol}
-                                onClick={() => setSelectedSymbol(sym)}
-                                className={`flex items-center justify-between px-3 py-2.5 rounded-lg
-                                           text-left transition-all cursor-pointer border ${
-                                  isSelected
-                                    ? "bg-safety-cyan/10 border-safety-cyan/40 text-safety-cyan"
-                                    : "bg-bg-surface border-border-default hover:border-border-hover"
-                                }`}
-                              >
-                                <div className="min-w-0">
-                                  <span className={`text-sm font-medium block truncate ${
-                                    isSelected ? "text-safety-cyan" : "text-text-primary"
-                                  }`}>
-                                    {sym.underlying_symbol_name}
-                                  </span>
-                                  <span className="font-mono-numbers text-xs text-text-muted">
-                                    {sym.underlying_symbol}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 ml-2 shrink-0">
-                                  <span className="font-mono-numbers text-[10px] text-text-muted">
-                                    pip {sym.pip_size}
-                                  </span>
-                                  <span className="w-2 h-2 rounded-full bg-alpha-green animate-live-pulse" />
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
                       </div>
-                    ))}
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono-numbers text-text-muted text-[10px]
+                                         bg-bg-surface px-2 py-0.5 rounded border border-border-default">
+                          {symbolCount}
+                        </span>
+                        <svg
+                          width="10"
+                          height="10"
+                          viewBox="0 0 10 10"
+                          className={`accordion-chevron ${isExpanded ? "accordion-open" : ""}
+                                      ${isExpanded ? "text-safety-cyan" : "text-text-muted"}`}
+                        >
+                          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor"
+                                strokeWidth="1.5" fill="none" strokeLinecap="round" />
+                        </svg>
+                      </div>
+                    </button>
+
+                    {/* Expanded instruments */}
+                    {isExpanded && (
+                      <div className="mt-2 ml-3 space-y-3 pl-3 border-l border-border-default/50">
+                        {group.submarkets.map((sub) => (
+                          <div key={sub.submarket}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="w-4 h-[1px] bg-border-hover" />
+                              <span className="font-mono-numbers text-text-muted text-[10px]
+                                               uppercase tracking-[0.2em]">
+                                {getSubmarketLabel(sub.submarket)}
+                              </span>
+                              <span className="flex-1 h-[1px] bg-border-default/30" />
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                              {sub.symbols.map((sym, idx) => {
+                                const isSelected =
+                                  selectedSymbol?.underlying_symbol === sym.underlying_symbol;
+                                return (
+                                  <button
+                                    key={sym.underlying_symbol}
+                                    onClick={() => setSelectedSymbol(sym)}
+                                    style={{ animationDelay: `${idx * 30}ms` }}
+                                    className={`instrument-card instrument-stagger
+                                               flex items-center justify-between pl-4 pr-3 py-2.5
+                                               rounded text-left cursor-pointer border
+                                               ${isSelected
+                                                 ? "instrument-selected bg-safety-cyan/8 border-safety-cyan/30"
+                                                 : "bg-bg-primary/40 border-border-default/60 hover:border-border-hover hover:bg-bg-primary/80"
+                                               }`}
+                                  >
+                                    <div className="min-w-0">
+                                      <span className={`text-sm font-medium block truncate ${
+                                        isSelected ? "text-safety-cyan" : "text-text-primary"
+                                      }`}>
+                                        {sym.underlying_symbol_name}
+                                      </span>
+                                      <span className={`font-mono-numbers text-[11px] ${
+                                        isSelected ? "text-safety-cyan/60" : "text-text-muted"
+                                      }`}>
+                                        {sym.underlying_symbol}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2.5 ml-2 shrink-0">
+                                      <span className="font-mono-numbers text-[9px] text-text-muted/60
+                                                       bg-bg-surface px-1.5 py-0.5 rounded border border-border-default/40">
+                                        PIP {sym.pip_size}
+                                      </span>
+                                      <span className={`w-1.5 h-1.5 rounded-full ${
+                                        isSelected ? "bg-safety-cyan" : "bg-alpha-green"
+                                      } animate-live-pulse`} />
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ——— SECTION: BUY-IN SELECTION ——— */}
+      <div className="terminal-panel bg-bg-surface border border-border-default rounded-lg mb-5 overflow-hidden">
+        {/* Header bar */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-border-default
+                        bg-bg-primary/50">
+          <div className="flex items-center gap-3">
+            <span className="font-mono-numbers text-safety-cyan text-xs font-bold
+                             bg-safety-cyan/10 px-2 py-0.5 rounded">02</span>
+            <h2 className="font-display text-base font-bold text-text-primary uppercase tracking-wider">
+              Set Buy-In
+            </h2>
           </div>
-        )}
-      </div>
-
-      {/* Step 2: Buy-in Selection */}
-      <div className="bg-bg-surface border border-border-default rounded-2xl p-6 mb-6">
-        <div className="flex items-center gap-3 mb-1">
-          <span className="font-mono-numbers text-safety-cyan text-sm font-bold">02</span>
-          <h2 className="text-lg font-bold text-text-primary">Set Your Buy-in</h2>
+          <span className="font-mono-numbers text-text-muted text-[10px]">
+            BALANCE: <span className="text-alpha-green">${player.game_token_balance.toLocaleString()}</span>
+          </span>
         </div>
-        <p className="text-text-muted text-sm mb-5 ml-8">
-          Higher stakes, bigger rewards. Matched with players at the same level.
-        </p>
 
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-          {buyInOptions.map((amount) => {
-            const canAfford = player.game_token_balance >= amount;
-            const isSelected = selectedBuyIn === amount;
-            return (
-              <button
-                key={amount}
-                onClick={() => setSelectedBuyIn(amount)}
-                disabled={!canAfford}
-                className={`border rounded-xl py-3 px-2 text-center transition-all cursor-pointer
-                  ${
-                    isSelected
-                      ? "bg-safety-cyan/10 border-safety-cyan/40"
+        <div className="px-5 py-4">
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+            {buyInOptions.map((amount) => {
+              const canAfford = player.game_token_balance >= amount;
+              const isSelected = selectedBuyIn === amount;
+              const tier = TIER_CONFIG[String(amount)] || TIER_CONFIG["100"];
+
+              return (
+                <button
+                  key={amount}
+                  onClick={() => setSelectedBuyIn(amount)}
+                  disabled={!canAfford}
+                  className={`tier-card rounded-lg py-3.5 px-2 text-center cursor-pointer border
+                    ${isSelected
+                      ? "tier-selected bg-safety-cyan/8 border-safety-cyan/30 shadow-[0_0_20px_rgba(0,229,255,0.1)]"
                       : canAfford
-                        ? "bg-bg-primary border-border-default hover:border-border-hover"
-                        : "bg-bg-primary/50 border-border-default/50 opacity-40 cursor-not-allowed"
-                  }`}
-              >
-                <span className={`font-mono-numbers text-base font-bold block ${
-                  isSelected ? "text-safety-cyan" : "text-text-primary"
-                }`}>
-                  ${amount.toLocaleString()}
-                </span>
-                <span className="text-text-muted text-[10px] mt-0.5 block">
-                  {amount <= 500
-                    ? "Beginner"
-                    : amount <= 1000
-                      ? "Standard"
-                      : amount <= 5000
-                        ? "Pro"
-                        : "High Roller"}
-                </span>
-              </button>
-            );
-          })}
+                        ? "bg-bg-primary border-border-default hover:border-border-hover hover:bg-bg-primary/80"
+                        : "bg-bg-primary/30 border-border-default/30 opacity-30 cursor-not-allowed"
+                    }`}
+                >
+                  <span className={`font-mono-numbers text-base font-bold block ${
+                    isSelected ? "text-safety-cyan glow-cyan" : "text-text-primary"
+                  }`}>
+                    ${amount.toLocaleString()}
+                  </span>
+                  <span className={`font-mono-numbers text-[9px] mt-1 block tracking-[0.15em] ${
+                    isSelected ? "text-safety-cyan/70" : tier.color
+                  }`}>
+                    {tier.label}
+                  </span>
+                  <span className={`font-mono-numbers text-[8px] mt-0.5 block ${
+                    isSelected ? "text-safety-cyan/40" : "text-text-muted/50"
+                  }`}>
+                    RISK: {tier.risk}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* Error */}
+      {/* ——— ERROR ——— */}
       {error && (
-        <div className="bg-rekt-crimson/10 border border-rekt-crimson/30 rounded-lg px-4 py-3 mb-6">
-          <p className="text-rekt-crimson text-sm">{error}</p>
+        <div className="bg-rekt-crimson/5 border border-rekt-crimson/20 rounded-lg px-4 py-3 mb-5
+                        flex items-center gap-3">
+          <span className="w-2 h-2 rounded-full bg-rekt-crimson shrink-0 animate-live-pulse" />
+          <p className="text-rekt-crimson text-sm font-mono-numbers">{error}</p>
         </div>
       )}
 
-      {/* Summary + Find Match */}
-      <div className="bg-bg-surface border border-border-default rounded-2xl p-6">
-        {/* Selection summary */}
-        {(selectedSymbol || selectedBuyIn) && (
-          <div className="flex items-center gap-4 mb-5 flex-wrap">
-            {selectedSymbol && (
-              <div className="flex items-center gap-2 bg-bg-primary border border-border-default rounded-lg px-3 py-2">
-                <span className="w-2 h-2 rounded-full bg-alpha-green" />
-                <span className="text-text-primary text-sm font-medium">
-                  {selectedSymbol.underlying_symbol_name}
-                </span>
-                <span className="font-mono-numbers text-text-muted text-xs">
-                  {selectedSymbol.underlying_symbol}
-                </span>
+      {/* ——— LAUNCH PANEL ——— */}
+      <div className="terminal-panel-green terminal-panel bg-bg-surface border border-border-default
+                       rounded-lg overflow-hidden">
+        {/* Selection readout */}
+        <div className="px-5 py-4">
+          {(selectedSymbol || selectedBuyIn) ? (
+            <div className="mb-4">
+              <span className="font-mono-numbers text-text-muted text-[10px] uppercase tracking-[0.2em] block mb-2">
+                Match Configuration
+              </span>
+              <div className="flex items-center gap-3 flex-wrap">
+                {selectedSymbol && (
+                  <div className="flex items-center gap-2 bg-bg-primary border border-border-default
+                                  rounded px-3 py-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-alpha-green animate-live-pulse" />
+                    <span className="text-text-primary text-sm font-medium">
+                      {selectedSymbol.underlying_symbol_name}
+                    </span>
+                    <span className="font-mono-numbers text-text-muted text-[10px] bg-bg-surface
+                                     px-1.5 py-0.5 rounded">
+                      {selectedSymbol.underlying_symbol}
+                    </span>
+                  </div>
+                )}
+                {selectedBuyIn && (
+                  <div className="flex items-center gap-2 bg-bg-primary border border-border-default
+                                  rounded px-3 py-2">
+                    <span className="font-mono-numbers text-safety-cyan text-sm font-bold">
+                      ${selectedBuyIn.toLocaleString()}
+                    </span>
+                    <span className="text-text-muted text-[10px]">BUY-IN</span>
+                  </div>
+                )}
               </div>
-            )}
-            {selectedBuyIn && (
-              <div className="bg-bg-primary border border-border-default rounded-lg px-3 py-2">
-                <span className="font-mono-numbers text-text-primary text-sm font-bold">
-                  ${selectedBuyIn.toLocaleString()}
-                </span>
-                <span className="text-text-muted text-xs ml-1">buy-in</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        <button
-          onClick={() => onFindMatch(selectedBuyIn!, selectedSymbol!.underlying_symbol)}
-          disabled={!canSearch}
-          className="w-full py-4 bg-safety-cyan text-bg-primary font-bold text-lg rounded-xl
-                     btn-glow cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed
-                     disabled:shadow-none transition-all"
-        >
-          {isLoading ? (
-            <span className="flex items-center justify-center gap-2">
-              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              Searching...
-            </span>
+            </div>
           ) : (
-            "FIND MATCH"
+            <div className="mb-4 flex items-center gap-2 py-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-text-muted/40" />
+              <span className="font-mono-numbers text-text-muted text-xs">
+                SELECT A MARKET AND BUY-IN TO QUEUE
+              </span>
+            </div>
           )}
-        </button>
 
-        {!selectedSymbol && !selectedBuyIn && (
-          <p className="text-text-muted text-xs text-center mt-3">
-            Select a market and buy-in to find a match.
-          </p>
-        )}
+          {/* CTA Button */}
+          <button
+            onClick={() => onFindMatch(selectedBuyIn!, selectedSymbol!.underlying_symbol)}
+            disabled={!canSearch}
+            className={`w-full py-4 font-display font-bold text-lg tracking-[0.1em] uppercase
+                       rounded-lg cursor-pointer transition-all clip-corner-sm
+                       disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none
+                       ${canSearch
+                         ? "btn-find-match text-safety-cyan"
+                         : "bg-bg-primary border border-border-default text-text-muted"
+                       }`}
+          >
+            {isLoading ? (
+              <span className="flex items-center justify-center gap-3">
+                <div className="relative">
+                  <div className="w-5 h-5 border border-safety-cyan/30 rounded-full" />
+                  <div className="absolute inset-0 w-5 h-5 border border-safety-cyan
+                                  border-t-transparent rounded-full animate-spin" />
+                </div>
+                <span className="font-mono-numbers text-sm tracking-[0.2em]">SEARCHING...</span>
+              </span>
+            ) : (
+              <span className="flex items-center justify-center gap-2">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="opacity-70">
+                  <path d="M9 2L16 9L9 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  <path d="M2 9H15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                FIND MATCH
+              </span>
+            )}
+          </button>
+        </div>
       </div>
+
+        </div>{/* end max-w-3xl */}
+      </div>{/* end content area */}
     </div>
   );
 }
