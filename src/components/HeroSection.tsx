@@ -93,10 +93,18 @@ export default function HeroSection() {
             </span>
           </motion.h1>
 
+          {/* Tagline */}
+          <motion.p
+            variants={item}
+            className="text-lg sm:text-2xl text-text-primary font-semibold max-w-md mx-auto mb-3 tracking-wide"
+          >
+            Trade as a Team, Win as a Team
+          </motion.p>
+
           {/* Subtext */}
           <motion.p
             variants={item}
-            className="text-base sm:text-lg text-text-secondary max-w-md mx-auto mb-3 leading-relaxed"
+            className="text-base sm:text-lg text-text-secondary max-w-md mx-auto mb-3 leading-relaxed font-mono-numbers"
           >
             5 players. 5 minutes. Live markets.
           </motion.p>
@@ -104,9 +112,6 @@ export default function HeroSection() {
             variants={item}
             className="text-sm text-text-muted max-w-md mx-auto mb-10"
           >
-            <span className="text-text-primary font-medium">
-              Turn trading into a team sport.
-            </span>{" "}
             No account. No real money. Pure competition.
           </motion.p>
 

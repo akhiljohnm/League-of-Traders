@@ -313,3 +313,36 @@ A comprehensive log of AI-assisted development for the Deriv API Grand Prix 2026
 * **AI Architecture/Solution:** Root cause: a `useEffect` was auto-expanding the first market group whenever `expandedMarket` was `null`. When the user clicked to close the accordion (setting `expandedMarket` to `null`), the effect re-triggered and immediately set it back to the first group's market key. Fix: added a `hasAutoExpanded` boolean ref that's set to `true` after the initial auto-expand. The effect's guard clause (`if (hasAutoExpanded.current) return`) ensures it only fires once on initial load, not on subsequent user interactions.
 * **Technical Execution:**
   - **`src/app/play/page.tsx`** (MODIFIED): Added `const hasAutoExpanded = useRef(false)` alongside existing `hasAutoSelected` ref. In the `useEffect` that auto-expands the first market group, added `if (hasAutoExpanded.current) return` guard. After setting `setExpandedMarket(grouped[0].market)`, sets `hasAutoExpanded.current = true`.
+
+---
+
+## Phase 12: Homepage Polish & Content Updates
+
+### Entry 33: Navbar Branding — Full Name Display
+
+* **Prompt/Problem:** The Navbar displayed "LOT" as the brand abbreviation with "League of Traders" only visible on larger screens via a separate hidden-on-mobile `<span>`. This felt like a missed branding opportunity — visitors might not immediately understand what "LOT" stands for.
+* **AI Architecture/Solution:** Consolidated the two separate text spans into a single "League of Traders" label rendered at all screen sizes. Removed the conditional `hidden sm:inline` secondary span entirely. The full brand name now always shows in `font-display font-bold tracking-widest text-safety-cyan`, matching the cyber-terminal aesthetic. The same change was mirrored in the homepage footer for consistency.
+* **Technical Execution:**
+  - **`src/components/Navbar.tsx`** (MODIFIED): Removed the `"LOT"` span and the `hidden sm:inline` secondary span. Single `<span>` now reads `"League of Traders"` in the existing `font-display font-bold text-base tracking-widest text-safety-cyan` classes.
+  - **`src/app/page.tsx`** (MODIFIED): Footer brand span changed from `"LOT"` to `"League of Traders"`.
+
+### Entry 34: Hero Section — Tagline Hierarchy Refinement
+
+* **Prompt/Problem:** The hero section's messaging hierarchy was flat — the subtext "5 players. 5 minutes. Live markets." and the descriptor "Turn trading into a team sport. No account. No real money. Pure competition." competed for attention without a clear emotional hook leading the hierarchy.
+* **AI Architecture/Solution:** Introduced a new tagline layer between the main headline and the subtext: **"Trade as a Team, Win as a Team"** — rendered as a `text-lg sm:text-2xl text-text-primary font-semibold` motion element, larger and bolder than the subtext below it. This creates a 3-tier hierarchy: (1) brand headline (largest), (2) emotional tagline (medium, white), (3) factual subtext (smaller, muted). The "5 players. 5 minutes. Live markets." line was switched to `font-mono-numbers` for the data-terminal aesthetic. The redundant "Turn trading into a team sport." line was removed since the new tagline covers that message more concisely.
+* **Technical Execution:**
+  - **`src/components/HeroSection.tsx`** (MODIFIED): Added new `<motion.p variants={item}>` element with tagline text after the main `<h1>`. Subtext paragraph switched to `font-mono-numbers` class. Removed the `"Turn trading into a team sport."` `<span>` from the descriptor paragraph — now reads "No account. No real money. Pure competition." only.
+
+### Entry 35: Player Feedback Section — YouTube Testimonial Grid
+
+* **Prompt/Problem:** The homepage had no social proof section. We needed a "Player Feedback" area where real player testimonial videos could be showcased, giving visitors confidence in the product before they sign up.
+* **AI Architecture/Solution:** Added a new `// 05 — Player Feedback` section between the Mercenary Bots section and the Footer CTA. Features a 3-column responsive grid (`grid-cols-1 md:grid-cols-3`) of vertical YouTube embeds (9:16 aspect ratio for portrait-style testimonials). Each video card has a strategy-colored top accent bar (cyan, green, red) matching the three-color system used throughout the landing page. Cards are wrapped in `StaggerItem` components for sequential entrance animations on scroll. Section header uses the established `section-label` + gradient title pattern.
+* **Technical Execution:**
+  - **`src/app/page.tsx`** (MODIFIED): New `<section id="feedback">` with `AnimateIn` header ("What Players Think" with `text-gradient-cyan` on "Think"). `StaggerGrid` containing three `StaggerItem` cards, each with a `bg-bg-surface` container, `step-card-accent-{color}` top bar, and a YouTube `<iframe>` embed using `aspect-[9/16]` for vertical video layout. Three testimonial videos embedded: `OnKOVT5GyUw`, `91UkX7walX4`, `w3DyXioWQjc`. Section placed before the Footer CTA with a `neon-divider` above and below.
+
+### Entry 36: Gameplay Demo Video — YouTube Embed Showcase Section
+
+* **Prompt/Problem:** The user wanted to embed a gameplay demo video on the homepage, positioned right after the "Three Steps. One Round." how-it-works section, to show visitors the game in action before they read the deeper mechanics.
+* **AI Architecture/Solution:** Added a "Watch the Game in Action" section between the How It Works cards and the Why League section. Uses a cinematic 16:9 embed container with a subtle cyan glow (`shadow-[0_0_60px_-15px_rgba(0,229,255,0.15)]`) and a gradient top accent bar to match the cyber-terminal aesthetic. The `paddingBottom: 56.25%` technique creates a responsive 16:9 aspect ratio container with the iframe absolutely positioned inside it. Section header follows the established pattern: `// See It Live` label, gradient-highlighted "Game" in the title, and a punchy tagline.
+* **Technical Execution:**
+  - **`src/app/page.tsx`** (MODIFIED): New `<section>` inserted after the How It Works `StaggerGrid` closing tag and before the first `neon-divider`. `AnimateIn` header with `text-gradient-cyan` on "Game". Inner container: `rounded-2xl overflow-hidden border border-safety-cyan/20 bg-bg-surface` with cyan box-shadow glow. Gradient top accent: `bg-gradient-to-r from-transparent via-safety-cyan to-transparent`. YouTube embed: `src="https://www.youtube.com/embed/xDXUiD5JF2Y"`, responsive via `paddingBottom: 56.25%` wrapper with `absolute inset-0` iframe. Staggered animation with `delay={0.1}` on the video container.

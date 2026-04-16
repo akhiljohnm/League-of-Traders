@@ -93,9 +93,6 @@ export default function Navbar() {
             </svg>
           </div>
           <span className="font-display font-bold text-base tracking-widest text-safety-cyan">
-            LOT
-          </span>
-          <span className="hidden sm:inline text-text-muted text-xs uppercase tracking-widest">
             League of Traders
           </span>
         </Link>

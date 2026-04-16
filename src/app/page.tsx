@@ -79,6 +79,38 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ============= VIDEO SHOWCASE ============= */}
+      <section className="py-20 px-6">
+        <div className="max-w-4xl mx-auto">
+          <AnimateIn className="text-center mb-10">
+            <p className="section-label mb-3">// See It Live</p>
+            <h2 className="font-display text-4xl sm:text-5xl font-bold text-text-primary mb-4 tracking-wide">
+              Watch the{" "}
+              <span className="text-gradient-cyan">Game</span>{" "}
+              in Action
+            </h2>
+            <p className="text-text-secondary text-center max-w-md mx-auto text-sm">
+              Five players. Five minutes. One shared market. Zero mercy.
+            </p>
+          </AnimateIn>
+
+          <AnimateIn delay={0.1}>
+            <div className="relative rounded-2xl overflow-hidden border border-safety-cyan/20 bg-bg-surface shadow-[0_0_60px_-15px_rgba(0,229,255,0.15)]">
+              <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-safety-cyan to-transparent" />
+              <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
+                <iframe
+                  src="https://www.youtube.com/embed/xDXUiD5JF2Y"
+                  title="League of Traders — Gameplay Demo"
+                  className="absolute inset-0 w-full h-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            </div>
+          </AnimateIn>
+        </div>
+      </section>
+
       <div className="neon-divider max-w-4xl mx-auto" />
 
       {/* ============= WHY LEAGUE ============= */}
@@ -334,6 +366,64 @@ export default function Home() {
 
       <div className="neon-divider max-w-4xl mx-auto" />
 
+      {/* ============= PLAYER FEEDBACK ============= */}
+      <section id="feedback" className="py-28 px-6">
+        <div className="max-w-5xl mx-auto">
+
+          <AnimateIn className="text-center mb-16">
+            <p className="section-label mb-3">// 05 — Player Feedback</p>
+            <h2 className="font-display text-4xl sm:text-5xl font-bold text-text-primary mb-4 tracking-wide">
+              What Players{" "}
+              <span className="text-gradient-cyan">Think</span>
+            </h2>
+            <p className="text-text-secondary text-center max-w-md mx-auto text-sm">
+              Don&apos;t take our word for it. Hear it from the traders.
+            </p>
+          </AnimateIn>
+
+          <StaggerGrid className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+            <StaggerItem>
+              <div className="relative bg-bg-surface border border-border-default rounded-xl overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-0.5 step-card-accent-cyan" />
+                <iframe
+                  src="https://www.youtube.com/embed/OnKOVT5GyUw"
+                  title="Player feedback 1"
+                  className="w-full aspect-[9/16]"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            </StaggerItem>
+            <StaggerItem>
+              <div className="relative bg-bg-surface border border-border-default rounded-xl overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-0.5 step-card-accent-green" />
+                <iframe
+                  src="https://www.youtube.com/embed/91UkX7walX4"
+                  title="Player feedback 2"
+                  className="w-full aspect-[9/16]"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            </StaggerItem>
+            <StaggerItem>
+              <div className="relative bg-bg-surface border border-border-default rounded-xl overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-0.5 step-card-accent-red" />
+                <iframe
+                  src="https://www.youtube.com/embed/w3DyXioWQjc"
+                  title="Player feedback 3"
+                  className="w-full aspect-[9/16]"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            </StaggerItem>
+          </StaggerGrid>
+        </div>
+      </section>
+
+      <div className="neon-divider max-w-4xl mx-auto" />
+
       {/* ================ FOOTER CTA ================ */}
       <section id="join" className="py-32 px-6 relative overflow-hidden">
         {/* Background atmosphere */}
@@ -379,7 +469,7 @@ export default function Home() {
       <footer className="border-t border-border-default py-8 px-6">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-safety-cyan font-display font-bold text-sm tracking-widest">LOT</span>
+            <span className="text-safety-cyan font-display font-bold text-sm tracking-widest">League of Traders</span>
             <span className="text-border-hover">·</span>
             <span className="text-text-muted text-xs">
               Powered by <span className="text-text-secondary">Deriv API V2</span>
