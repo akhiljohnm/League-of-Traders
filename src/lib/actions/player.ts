@@ -90,8 +90,9 @@ export async function getOrCreatePlayer(username: string, avatarId?: number): Pr
     throw new Error(`Failed to create player: ${createError.message}`);
   }
 
+  if (!created) throw new Error("Failed to create player: no data returned after insert.");
   console.log(`[Player] Created new player: ${created.username} (${created.id}) with $${STARTING_BALANCE}`);
-  return created as Player;
+  return created;
 }
 
 /**
