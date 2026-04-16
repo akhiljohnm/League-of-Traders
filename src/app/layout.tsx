@@ -1,15 +1,22 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { DM_Sans, JetBrains_Mono, Rajdhani } from "next/font/google";
 import "./globals.css";
+import { DerivTickerProvider } from "@/providers/DerivTickerProvider";
 
-const inter = Inter({
+const dmSans = DM_Sans({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-dm-sans",
 });
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-jetbrains",
+});
+
+const rajdhani = Rajdhani({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-rajdhani",
 });
 
 export const metadata: Metadata = {
@@ -26,9 +33,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${inter.variable} ${jetbrainsMono.variable} antialiased`}
+        className={`${dmSans.variable} ${jetbrainsMono.variable} ${rajdhani.variable} antialiased`}
       >
-        {children}
+        <DerivTickerProvider>
+          {children}
+        </DerivTickerProvider>
       </body>
     </html>
   );

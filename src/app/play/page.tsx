@@ -5,6 +5,7 @@ import { getOrCreatePlayer, getPlayerById } from "@/lib/actions/player";
 import { findOrCreateLobby, joinLobby, getLobbyPlayers, getLobby } from "@/lib/actions/lobby";
 import type { Player, Lobby, LobbyPlayer } from "@/lib/types/database";
 import type { DerivActiveSymbol } from "@/lib/types/deriv";
+import { getOrAssignAvatar, syncAvatarCookie, getAvatarUrl } from "@/lib/avatar";
 import { useActiveSymbols, getMarketLabel, getSubmarketLabel } from "@/hooks/useActiveSymbols";
 import type { PayoutSummary } from "@/lib/game/payout-engine";
 import Navbar from "@/components/Navbar";
@@ -33,6 +34,7 @@ export default function PlayPage() {
       console.log("[Play] Restoring session for player:", savedPlayerId);
       getPlayerById(savedPlayerId).then((p) => {
         if (p) {
+          if (p.avatar_id) syncAvatarCookie(p.avatar_id);
           setPlayer(p);
           setPhase("market-select");
           console.log("[Play] Session restored:", p.username);
@@ -45,7 +47,10 @@ export default function PlayPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const p = await getOrCreatePlayer(username);
+      const avatarId = getOrAssignAvatar();
+      const p = await getOrCreatePlayer(username, avatarId);
+      // Keep cookie in sync with whatever the DB ended up with
+      if (p.avatar_id) syncAvatarCookie(p.avatar_id);
       setPlayer(p);
       localStorage.setItem("lot_player_id", p.id);
       console.log(`[Play] Logged in as: ${p.username} ($${p.game_token_balance})`);
@@ -112,7 +117,7 @@ export default function PlayPage() {
     <main className="min-h-screen bg-bg-primary">
       {phase !== "game" && phase !== "post-game" && <Navbar />}
 
-      <div className={`${phase === "game" || phase === "post-game" ? "pt-6" : "pt-24"} pb-16 px-6`}>
+      <div className={`${phase === "game" || phase === "post-game" ? "pt-6" : phase === "login" ? "pt-16" : "pt-24"} pb-16 px-6`}>
         {phase === "login" && (
           <div className="animate-fade-up">
             <UsernameForm
@@ -213,7 +218,6 @@ export default function PlayPage() {
     </main>
   );
 }
-
 /* ===================== MARKET SELECTOR ===================== */
 
 function MarketSelector({
@@ -251,10 +255,20 @@ function MarketSelector({
       <div className="bg-bg-surface border border-border-default rounded-2xl p-6 mb-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-safety-cyan/10 border border-safety-cyan/20 flex items-center justify-center">
-              <span className="text-safety-cyan font-bold text-sm">
-                {player.username.slice(0, 2).toUpperCase()}
-              </span>
+            <div className="w-10 h-10 rounded-full overflow-hidden border border-safety-cyan/30 shrink-0">
+              {player.avatar_id ? (
+                <img
+                  src={getAvatarUrl(player.avatar_id)}
+                  alt={player.username}
+                  className="w-full h-full object-cover object-top"
+                />
+              ) : (
+                <div className="w-full h-full bg-safety-cyan/10 flex items-center justify-center">
+                  <span className="text-safety-cyan font-bold text-sm">
+                    {player.username.slice(0, 2).toUpperCase()}
+                  </span>
+                </div>
+              )}
             </div>
             <div>
               <span className="text-text-primary font-semibold text-sm block">
@@ -496,3 +510,4 @@ function MarketSelector({
     </div>
   );
 }
+

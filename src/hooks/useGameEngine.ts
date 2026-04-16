@@ -60,6 +60,8 @@ export interface PlayerBalance {
   username: string;
   isBot: boolean;
   botStrategy: string | null;
+  avatarId: number | null;
+  hiredBy: string | null;
   balance: number;
   initialBalance: number;
   tradeCount: number;
@@ -98,6 +100,9 @@ interface UseGameEngineReturn {
   playerBalances: PlayerBalance[];
   gamePhase: GamePhase;
   payoutSummary: PayoutSummary | null;
+
+  pausedBots: Set<string>;
+  toggleBotPause: (botId: string) => void;
 }
 
 export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn {
@@ -128,6 +133,7 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
   const [botBalances, setBotBalances] = useState<
     Map<string, { balance: number; tradeCount: number }>
   >(new Map());
+  const [pausedBots, setPausedBots] = useState<Set<string>>(new Set());
 
   // Other human players' balances tracked via Supabase Realtime
   const [otherHumanBalances, setOtherHumanBalances] = useState<
@@ -418,6 +424,7 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
         tradeCount,
         isBot: lp.player.is_bot,
         hiredBy: lp.hired_by,
+        avatarId: lp.player.avatar_id,
         hasForfeited: forfeitedPlayerIds.has(lp.player.id),
       };
     });
@@ -593,6 +600,22 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
     [currentTick, isGameOver, humanBalance, currentPlayer.id, lobbyId]
   );
 
+  const toggleBotPause = useCallback((botId: string) => {
+    const engine = botEngineRef.current;
+    if (!engine) return;
+    if (engine.isPaused(botId)) {
+      engine.resumeBot(botId);
+      setPausedBots((prev) => {
+        const next = new Set(prev);
+        next.delete(botId);
+        return next;
+      });
+    } else {
+      engine.pauseBot(botId);
+      setPausedBots((prev) => new Set(prev).add(botId));
+    }
+  }, []);
+
   const canTrade =
     gamePhase === "active" && !!currentTick && isConnected && humanBalance > 0;
 
@@ -624,6 +647,8 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
         username: lp.player.username,
         isBot,
         botStrategy: lp.player.bot_strategy,
+        avatarId: lp.player.avatar_id,
+        hiredBy: lp.hired_by,
         balance,
         initialBalance: buyIn,
         tradeCount,
@@ -653,5 +678,7 @@ export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn 
     playerBalances,
     gamePhase,
     payoutSummary,
+    pausedBots,
+    toggleBotPause,
   };
 }

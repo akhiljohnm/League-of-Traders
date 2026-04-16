@@ -14,6 +14,7 @@ export interface PayoutInput {
   tradeCount: number;
   isBot: boolean;
   hiredBy: string | null;
+  avatarId: number | null;
   /** Player explicitly exited mid-game — their balance goes to the Safety Net. */
   hasForfeited: boolean;
 }
@@ -24,6 +25,7 @@ export interface PayoutResult {
   playerId: string;
   username: string;
   isBot: boolean;
+  avatarId: number | null;
   tradeCount: number;
   rawBalance: number;
   role: PayoutRole;
@@ -71,6 +73,7 @@ export function calculatePayouts(
         playerId: p.playerId,
         username: p.username,
         isBot: p.isBot,
+        avatarId: p.avatarId,
         tradeCount: p.tradeCount,
         rawBalance: p.rawBalance,
         role: "forfeited" as PayoutRole,
@@ -94,6 +97,7 @@ export function calculatePayouts(
         playerId: p.playerId,
         username: p.username,
         isBot: p.isBot,
+        avatarId: p.avatarId,
         tradeCount: p.tradeCount,
         rawBalance: p.rawBalance,
         role: "inactive" as PayoutRole,
@@ -121,6 +125,7 @@ export function calculatePayouts(
       playerId: p.playerId,
       username: p.username,
       isBot: p.isBot,
+      avatarId: p.avatarId,
       tradeCount: p.tradeCount,
       rawBalance: p.rawBalance,
       role,

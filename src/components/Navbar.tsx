@@ -85,8 +85,14 @@ export default function Navbar() {
     >
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <span className="text-safety-cyan font-bold text-lg tracking-tight">
+        <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
+          <div className="relative w-7 h-7 rounded-md bg-safety-cyan/10 border border-safety-cyan/30 flex items-center justify-center group-hover:bg-safety-cyan/20 transition-colors duration-200">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <polyline points="1,12 5,7 9,9 15,3" stroke="#00E5FF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              <polyline points="11,3 15,3 15,7" stroke="#00E5FF" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <span className="font-display font-bold text-base tracking-widest text-safety-cyan">
             LOT
           </span>
           <span className="hidden sm:inline text-text-muted text-xs uppercase tracking-widest">
@@ -132,11 +138,8 @@ export default function Navbar() {
 
         {/* Desktop CTA */}
         <a
-          href={isHomePage ? "#join" : "/#join"}
-          onClick={
-            isHomePage ? (e) => handleAnchorClick(e, "#join") : undefined
-          }
-          className="hidden md:inline-block py-2 px-5 bg-safety-cyan text-bg-primary text-sm font-bold rounded-lg hover:brightness-110 active:scale-[0.98] transition-all duration-150 cursor-pointer"
+          href="/play"
+          className="hidden md:inline-block py-2 px-5 bg-safety-cyan text-bg-primary text-sm font-bold rounded-lg hover:brightness-110 active:scale-[0.98] transition-all duration-150 cursor-pointer font-display tracking-widest uppercase"
         >
           Join the League
         </a>
@@ -205,10 +208,7 @@ export default function Navbar() {
               )
             )}
             <a
-              href={isHomePage ? "#join" : "/#join"}
-              onClick={
-                isHomePage ? (e) => handleAnchorClick(e, "#join") : undefined
-              }
+              href="/play"
               className="mt-2 py-2.5 px-5 bg-safety-cyan text-bg-primary text-sm font-bold rounded-lg text-center"
             >
               Join the League

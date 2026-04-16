@@ -13,6 +13,7 @@ import { TICK_DURATION_OPTIONS, RISE_PAYOUT, FALL_PAYOUT } from "@/lib/game/rise
 import { updatePlayerFinalBalance } from "@/lib/actions/lobby";
 import type { Player, LobbyPlayer, TradeDirection } from "@/lib/types/database";
 import type { DerivTick } from "@/lib/types/deriv";
+import { getAvatarUrl } from "@/lib/avatar";
 import TradingChart from "@/components/TradingChart";
 
 // ============================================================
@@ -250,6 +251,9 @@ export default function GameView({
           <TeamLeaderboard
             players={engine.playerBalances}
             buyIn={buyIn}
+            currentPlayerId={currentPlayer.id}
+            pausedBots={engine.pausedBots}
+            toggleBotPause={engine.toggleBotPause}
           />
         </div>
       </div>
@@ -525,9 +529,15 @@ const ROW_GAP = 8; // space-y-2 = 8px
 function TeamLeaderboard({
   players,
   buyIn,
+  currentPlayerId,
+  pausedBots,
+  toggleBotPause,
 }: {
   players: PlayerBalance[];
   buyIn: number;
+  currentPlayerId: string;
+  pausedBots: Set<string>;
+  toggleBotPause: (botId: string) => void;
 }) {
   // Track previous ranks to detect movement
   const prevRanksRef = useRef<Map<string, number>>(new Map());
@@ -598,6 +608,8 @@ function TeamLeaderboard({
           const pnlColor = p.pnl >= 0 ? "text-alpha-green" : "text-rekt-crimson";
           const pnlSign = p.pnl >= 0 ? "+" : "";
           const isLeader = i === 0;
+          const isMyBot = p.isBot && p.hiredBy === currentPlayerId;
+          const isPaused = pausedBots.has(p.playerId);
           const change = rankChanges.get(p.playerId);
 
           // Flash class based on rank movement
@@ -650,23 +662,33 @@ function TeamLeaderboard({
               </div>
 
               {/* Avatar */}
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                  p.isBot
-                    ? "bg-bg-elevated border border-border-hover text-safety-cyan"
-                    : isLeader
-                      ? "bg-yellow-400/10 border border-yellow-400/30 text-yellow-400"
-                      : "bg-safety-cyan/10 border border-safety-cyan/20 text-safety-cyan"
-                }`}
-              >
+              <div className={`w-8 h-8 rounded-full overflow-hidden shrink-0 border ${
+                p.isBot
+                  ? "border-border-hover"
+                  : isLeader
+                    ? "border-yellow-400/40"
+                    : "border-safety-cyan/20"
+              }`}>
                 {p.isBot ? (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <rect x="3" y="11" width="18" height="10" rx="2" />
-                    <circle cx="12" cy="5" r="3" />
-                    <line x1="12" y1="8" x2="12" y2="11" />
-                  </svg>
+                  <div className="w-full h-full bg-bg-elevated flex items-center justify-center text-safety-cyan">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <rect x="3" y="11" width="18" height="10" rx="2" />
+                      <circle cx="12" cy="5" r="3" />
+                      <line x1="12" y1="8" x2="12" y2="11" />
+                    </svg>
+                  </div>
+                ) : p.avatarId ? (
+                  <img
+                    src={getAvatarUrl(p.avatarId)}
+                    alt={p.username}
+                    className="w-full h-full object-cover object-top"
+                  />
                 ) : (
-                  p.username.slice(0, 2).toUpperCase()
+                  <div className={`w-full h-full flex items-center justify-center text-xs font-bold ${
+                    isLeader ? "bg-yellow-400/10 text-yellow-400" : "bg-safety-cyan/10 text-safety-cyan"
+                  }`}>
+                    {p.username.slice(0, 2).toUpperCase()}
+                  </div>
                 )}
               </div>
 
@@ -694,21 +716,60 @@ function TeamLeaderboard({
                     </span>
                   )}
                 </div>
-                <span className="text-text-muted text-[10px] font-mono-numbers">
-                  {p.tradeCount} trades
-                </span>
+                <div className="flex items-center gap-1">
+                  <span className="text-text-muted text-[10px] font-mono-numbers">
+                    {p.tradeCount} trades
+                  </span>
+                  {isPaused && (
+                    <span className="text-[9px] font-mono-numbers font-bold text-alpha-green bg-alpha-green/10 px-1 py-0.5 rounded animate-live-pulse">
+                      SECURED
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Balance + PnL */}
-              <div className="text-right shrink-0">
+              {/* Balance + PnL + optional pause control */}
+              <div className="text-right shrink-0 flex flex-col items-end gap-1">
                 <span className={`font-mono-numbers text-xs font-bold block ${
                   isLeader ? "text-yellow-400" : "text-text-primary"
                 }`}>
                   ${p.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
-                <span className={`font-mono-numbers text-[10px] ${pnlColor}`}>
-                  {pnlSign}${Math.abs(p.pnl).toFixed(2)}
-                </span>
+                {isMyBot ? (
+                  <button
+                    onClick={() => toggleBotPause(p.playerId)}
+                    title={isPaused ? "Resume bot trading" : "Pause bot — lock in current profits"}
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold font-mono-numbers
+                                transition-all cursor-pointer border ${
+                      isPaused
+                        ? "bg-alpha-green/10 border-alpha-green/40 text-alpha-green hover:bg-alpha-green/20"
+                        : "bg-rekt-crimson/10 border-rekt-crimson/30 text-rekt-crimson hover:bg-rekt-crimson/20"
+                    }`}
+                  >
+                    {isPaused ? (
+                      <>
+                        {/* Play icon */}
+                        <svg width="8" height="8" viewBox="0 0 10 10" fill="currentColor">
+                          <polygon points="2,1 9,5 2,9" />
+                        </svg>
+                        RESUME
+                      </>
+                    ) : (
+                      <>
+                        {/* Pause icon */}
+                        <svg width="8" height="8" viewBox="0 0 10 10" fill="currentColor">
+                          <rect x="1" y="1" width="3" height="8" />
+                          <rect x="6" y="1" width="3" height="8" />
+                        </svg>
+                        PAUSE
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <span className={`font-mono-numbers text-[10px] ${pnlColor}`}>
+                    {pnlSign}${Math.abs(p.pnl).toFixed(2)}
+                  </span>
+                )}
               </div>
             </div>
           );

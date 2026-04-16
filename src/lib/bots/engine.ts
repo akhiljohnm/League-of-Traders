@@ -29,6 +29,7 @@ interface ManagedBot {
 export class BotEngine {
   private bots: Map<string, ManagedBot> = new Map();
   private pendingTrades: PendingTrade[] = [];
+  private pausedBots: Set<string> = new Set();
   private tickIndex = 0;
   private lobbyId: string;
 
@@ -80,6 +81,8 @@ export class BotEngine {
     }
 
     for (const [botId, bot] of this.bots) {
+      // Skip signal generation for paused bots — pending trades still resolve below
+      if (this.pausedBots.has(botId)) continue;
       const openTrades = openTradesByBot.get(botId) ?? 0;
       const decision = bot.strategy.onTick(tick, bot.balance, this.getInitialBalance(botId), openTrades);
       if (decision) {
@@ -197,6 +200,28 @@ export class BotEngine {
     this.tickIndex = savedIndex + maxDuration + 1;
     await this.resolveMaturedTrades(finalTick);
     this.tickIndex = savedIndex;
+  }
+
+  /**
+   * Stop a bot from placing new trades. Already-open trades still resolve normally.
+   */
+  pauseBot(botId: string): void {
+    this.pausedBots.add(botId);
+    const bot = this.bots.get(botId);
+    console.log(`[BotEngine] ${bot?.player.username ?? botId} PAUSED — no new trades will be placed`);
+  }
+
+  /**
+   * Allow a previously paused bot to resume trading.
+   */
+  resumeBot(botId: string): void {
+    this.pausedBots.delete(botId);
+    const bot = this.bots.get(botId);
+    console.log(`[BotEngine] ${bot?.player.username ?? botId} RESUMED`);
+  }
+
+  isPaused(botId: string): boolean {
+    return this.pausedBots.has(botId);
   }
 
   /**

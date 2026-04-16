@@ -172,22 +172,12 @@ export async function getLobbyPlayers(
 
 /**
  * Hire a mercenary bot into the lobby. Bot buy-in matches the lobby's buy-in.
- * Requires an active subscription ($200/month) for the bot strategy.
  */
 export async function hireMercenaryBot(
   lobbyId: string,
   hiredByPlayerId: string,
   strategy: BotStrategy
 ): Promise<{ bot: Player; lobbyPlayer: LobbyPlayer }> {
-  // Check subscription is active (triggers lazy renewal if expired)
-  const { hasActiveSubscription } = await import("./subscription");
-  const isSubscribed = await hasActiveSubscription(hiredByPlayerId, strategy);
-  if (!isSubscribed) {
-    throw new Error(
-      "You need an active subscription to hire this bot. Subscribe for $200/month."
-    );
-  }
-
   // Check lobby isn't full
   const { count } = await supabase
     .from("lobby_players")

@@ -10,12 +10,6 @@ export type BotStrategy =
   | "mean_reverter"
   | "high_freq_gambler";
 
-/** Monthly bot subscription cost in game tokens */
-export const BOT_SUBSCRIPTION_COST = 200;
-
-/** Subscription duration in days */
-export const BOT_SUBSCRIPTION_DAYS = 30;
-
 // ---- Row Types ----
 
 export interface Player {
@@ -24,6 +18,7 @@ export interface Player {
   game_token_balance: number;
   is_bot: boolean;
   bot_strategy: BotStrategy | null;
+  avatar_id: number | null;
   created_at: string;
 }
 
@@ -59,16 +54,6 @@ export interface Trade {
   status: TradeStatus;
   created_at: string;
   resolved_at: string | null;
-}
-
-export interface BotSubscription {
-  id: string;
-  player_id: string;
-  bot_strategy: BotStrategy;
-  purchased_at: string;
-  expires_at: string;
-  is_active: boolean;
-  created_at: string;
 }
 
 // ---- Insert Types (omit server-generated fields) ----

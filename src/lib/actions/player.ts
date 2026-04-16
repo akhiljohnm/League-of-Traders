@@ -8,7 +8,7 @@ const STARTING_BALANCE = 10_000;
  * If the username exists, return the existing player.
  * If not, create a new one with $10,000 starting balance.
  */
-export async function getOrCreatePlayer(username: string): Promise<Player> {
+export async function getOrCreatePlayer(username: string, avatarId?: number): Promise<Player> {
   const trimmed = username.trim().toLowerCase();
 
   if (!trimmed || trimmed.length < 2 || trimmed.length > 20) {
@@ -23,6 +23,19 @@ export async function getOrCreatePlayer(username: string): Promise<Player> {
     .single();
 
   if (existing && !findError) {
+    // Backfill avatar if the player doesn't have one yet
+    if (avatarId && !existing.avatar_id) {
+      const { data: updated } = await supabase
+        .from("players")
+        .update({ avatar_id: avatarId })
+        .eq("id", existing.id)
+        .select()
+        .single();
+      if (updated) {
+        console.log(`[Player] Backfilled avatar ${avatarId} for ${existing.username}`);
+        return updated as Player;
+      }
+    }
     console.log(`[Player] Found existing player: ${existing.username} (${existing.id})`);
     return existing as Player;
   }
@@ -34,6 +47,7 @@ export async function getOrCreatePlayer(username: string): Promise<Player> {
       username: trimmed,
       game_token_balance: STARTING_BALANCE,
       is_bot: false,
+      avatar_id: avatarId ?? null,
     })
     .select()
     .single();

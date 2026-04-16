@@ -1,6 +1,7 @@
 "use client";
 
 import type { PayoutSummary, PayoutResult, PayoutRole } from "@/lib/game/payout-engine";
+import { getAvatarUrl } from "@/lib/avatar";
 
 // ============================================================
 // PostGameView — Full-screen post-game results & leaderboard
@@ -382,21 +383,27 @@ function PlayerResultCard({
         </span>
 
         {/* Avatar */}
-        <div
-          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-            player.isBot
-              ? "bg-bg-elevated border border-border-hover text-safety-cyan"
-              : "bg-safety-cyan/10 border border-safety-cyan/20 text-safety-cyan"
-          }`}
-        >
+        <div className={`w-8 h-8 rounded-full overflow-hidden shrink-0 border ${
+          player.isBot ? "border-border-hover" : "border-safety-cyan/20"
+        }`}>
           {player.isBot ? (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <rect x="3" y="11" width="18" height="10" rx="2" />
-              <circle cx="12" cy="5" r="3" />
-              <line x1="12" y1="8" x2="12" y2="11" />
-            </svg>
+            <div className="w-full h-full bg-bg-elevated flex items-center justify-center text-safety-cyan">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <rect x="3" y="11" width="18" height="10" rx="2" />
+                <circle cx="12" cy="5" r="3" />
+                <line x1="12" y1="8" x2="12" y2="11" />
+              </svg>
+            </div>
+          ) : player.avatarId ? (
+            <img
+              src={getAvatarUrl(player.avatarId)}
+              alt={player.username}
+              className="w-full h-full object-cover object-top"
+            />
           ) : (
-            player.username.slice(0, 2).toUpperCase()
+            <div className="w-full h-full bg-safety-cyan/10 flex items-center justify-center text-xs font-bold text-safety-cyan">
+              {player.username.slice(0, 2).toUpperCase()}
+            </div>
           )}
         </div>
 
