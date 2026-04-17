@@ -40,9 +40,10 @@ const PLAYER_COLORS = [
   "#9370DB", // Medium Purple
 ];
 
+const WS_URL = process.env.NEXT_PUBLIC_DERIV_WS_URL!;
+
 export default function TradingChart({
   symbol,
-  currentTick,
   playerBalances,
   lobbyId,
 }: TradingChartProps) {
@@ -52,6 +53,9 @@ export default function TradingChart({
 
   // Track if component is mounted (client-side only)
   const [isMounted, setIsMounted] = useState(false);
+
+  // Local live tick state (subscribed to the specific symbol)
+  const [liveTick, setLiveTick] = useState<DerivTick | null>(null);
 
   // Fetch historical ticks
   const { prices, times, isLoading, error: historyError } = useTickHistory({
@@ -67,6 +71,39 @@ export default function TradingChart({
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  // Subscribe to live ticks for this specific symbol
+  useEffect(() => {
+    if (!isMounted) return;
+
+    const ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+    };
+
+    ws.onmessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        if (data.msg_type === "tick" && data.tick) {
+          setLiveTick(data.tick as DerivTick);
+        }
+      } catch (e) {
+        console.error("[TradingChart] Failed to parse tick message:", e);
+      }
+    };
+
+    ws.onerror = () => {
+      console.error(`[TradingChart] WebSocket error for ${symbol}`);
+    };
+
+    return () => {
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+    };
+  }, [symbol, isMounted]);
 
   // Callback ref - called when the container div is mounted
   const chartContainerRef = useCallback((node: HTMLDivElement | null) => {
@@ -169,10 +206,11 @@ export default function TradingChart({
   // All trades in this lobby (for markers)
   const [allTrades, setAllTrades] = useState<Trade[]>([]);
 
-  // Player color mapping
+  // Player color and name mappings
   const playerColorMap = useRef<Map<string, string>>(new Map());
+  const playerNameMap = useRef<Map<string, string>>(new Map());
 
-  // ---- Assign colors to players (only when count changes) ----
+  // ---- Assign colors and names to players (only when count changes) ----
   useEffect(() => {
     playerBalances.forEach((p, i) => {
       if (!playerColorMap.current.has(p.playerId)) {
@@ -181,6 +219,7 @@ export default function TradingChart({
           PLAYER_COLORS[i % PLAYER_COLORS.length]
         );
       }
+      playerNameMap.current.set(p.playerId, p.username);
     });
   }, [playerBalances.length]); // Dependency: only re-run when player count changes
 
@@ -290,16 +329,16 @@ export default function TradingChart({
 
   // ---- Update chart with live tick ----
   useEffect(() => {
-    if (!seriesRef.current || !currentTick) return;
+    if (!seriesRef.current || !liveTick) return;
 
     const newPoint: LineData = {
-      time: currentTick.epoch as Time,
-      value: currentTick.quote,
+      time: liveTick.epoch as Time,
+      value: liveTick.quote,
     };
 
     seriesRef.current.update(newPoint);
     setChartData((prev) => [...prev, newPoint]);
-  }, [currentTick]);
+  }, [liveTick]);
 
   // ---- Render trade markers ----
   useEffect(() => {
@@ -314,6 +353,10 @@ export default function TradingChart({
 
     allTrades.forEach((trade) => {
       const color = playerColorMap.current.get(trade.player_id) || "#00FFA3";
+      const playerName = playerNameMap.current.get(trade.player_id) || "??";
+
+      // Get player initials (first 2 letters, uppercase)
+      const initials = playerName.slice(0, 2).toUpperCase();
 
       // Convert ISO timestamp to Unix epoch (seconds)
       const entryTime = Math.floor(new Date(trade.created_at).getTime() / 1000) as Time;
@@ -324,7 +367,7 @@ export default function TradingChart({
         position: "belowBar",
         color,
         shape: trade.direction === "UP" ? "arrowUp" : "arrowDown",
-        text: `${trade.direction} $${trade.stake.toFixed(0)}`,
+        text: `[${initials}] ${trade.direction} $${trade.stake.toFixed(0)}`,
         size: 2, // Make markers larger
       });
 
@@ -344,8 +387,8 @@ export default function TradingChart({
           color: exitColor,
           shape: "circle",
           text: trade.status === "won"
-            ? `+$${displayPayout.toFixed(0)}`
-            : `-$${trade.stake.toFixed(0)}`,
+            ? `[${initials}] +$${displayPayout.toFixed(0)}`
+            : `[${initials}] -$${trade.stake.toFixed(0)}`,
           size: 2, // Make markers larger
         });
       }

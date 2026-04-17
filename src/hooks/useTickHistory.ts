@@ -72,7 +72,6 @@ export function useTickHistory(
       };
 
       ws.send(JSON.stringify(request));
-      console.log(`[useTickHistory] Sent ticks_history request for ${symbol}`);
     };
 
     ws.onmessage = (event: MessageEvent) => {
