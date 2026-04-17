@@ -34,7 +34,7 @@ To build this rapidly and deploy it reliably, we will use a modern JavaScript/Ty
 * **Action:** The Next.js frontend subscribes to this database row. As soon as the lobby hits exactly 5 players, the backend flags the lobby as `status: 'locked'` and triggers the game countdown.
 
 ### Step 3: The Game Loop & The Oracle (Deriv API)
-* **How it works:** A 5-minute global timer begins. We open a public WebSocket connection to Deriv (`wss://ws.derivws.com/websockets/v3`) and subscribe to a specific market's tick stream (e.g., Volatility 100 Index).
+* **How it works:** A 5-minute global timer begins. We open a public WebSocket connection to Deriv (`wss://api.derivws.com/trading/v1/options/ws/public`) and subscribe to a specific market's tick stream (e.g., Volatility 100 Index).
 * **Action:** 1. **Live Chart:** The frontend displays the live Deriv prices.
   2. **Placing Trades:** When a user clicks "Buy UP", we DO NOT send this to Deriv. Instead, we log a row in our Supabase `trades` table: `[User ID, Direction: UP, Stake: $50, Entry Price: Current Deriv Tick, Status: Open]`.
 
