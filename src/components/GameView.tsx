@@ -25,6 +25,8 @@ interface GameViewProps {
   currentPlayer: Player;
   allPlayers: (LobbyPlayer & { player: Player })[];
   buyIn: number;
+  isMuted: boolean;
+  onMuteToggle: () => void;
   onGameEnd: (summary: PayoutSummary) => void;
   onExitGame: () => void;
 }
@@ -35,6 +37,8 @@ export default function GameView({
   currentPlayer,
   allPlayers,
   buyIn,
+  isMuted,
+  onMuteToggle,
   onGameEnd,
   onExitGame,
 }: GameViewProps) {
@@ -53,44 +57,6 @@ export default function GameView({
   });
   const [showExitModal, setShowExitModal] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-
-  // Background music
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  useEffect(() => {
-    const audio = new Audio("/assests/League%20of%20Traders%20Soundtrack.mp3");
-    audio.loop = true;
-    audio.volume = 0.4;
-    audioRef.current = audio;
-    return () => {
-      audio.pause();
-      audio.src = "";
-      audioRef.current = null;
-    };
-  }, []);
-
-  // Start music when game becomes active
-  useEffect(() => {
-    if (engine.gamePhase === "active" && audioRef.current && !isMuted) {
-      audioRef.current.play().catch(() => {
-        console.log("[GameView] Audio autoplay blocked — user must interact first");
-      });
-    }
-    if (engine.gamePhase === "finished" && audioRef.current) {
-      audioRef.current.pause();
-    }
-  }, [engine.gamePhase, isMuted]);
-
-  // Handle mute toggle
-  useEffect(() => {
-    if (!audioRef.current) return;
-    if (isMuted) {
-      audioRef.current.pause();
-    } else if (engine.gamePhase === "active") {
-      audioRef.current.play().catch(() => {});
-    }
-  }, [isMuted, engine.gamePhase]);
 
   // Transition to post-game once payout is calculated
   const postGameCalledRef = useRef(false);
@@ -262,7 +228,7 @@ export default function GameView({
 
           {/* Music Toggle */}
           <button
-            onClick={() => setIsMuted((m) => !m)}
+            onClick={onMuteToggle}
             title={isMuted ? "Unmute music" : "Mute music"}
             className="p-1.5 rounded border border-border-default hover:border-border-hover
                        hover:bg-bg-elevated transition-colors cursor-pointer"
@@ -318,6 +284,7 @@ export default function GameView({
             <TradingChart
               symbol={symbol}
               currentTick={engine.currentTick}
+              isConnected={engine.isConnected}
               playerBalances={engine.playerBalances}
               lobbyId={lobbyId}
             />

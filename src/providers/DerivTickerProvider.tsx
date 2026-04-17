@@ -29,6 +29,8 @@ export interface DerivTickerContextValue {
   connectionState: DerivConnectionState;
   error: string | null;
   tickCount: number;
+  symbol: string;
+  setSymbol: (symbol: string) => void;
 }
 
 export const DerivTickerContext = createContext<DerivTickerContextValue>({
@@ -38,6 +40,8 @@ export const DerivTickerContext = createContext<DerivTickerContextValue>({
   connectionState: "disconnected",
   error: null,
   tickCount: 0,
+  symbol: DERIV_SYMBOL_VOL_100,
+  setSymbol: () => {},
 });
 
 export function DerivTickerProvider({ children }: { children: ReactNode }) {
@@ -47,6 +51,10 @@ export function DerivTickerProvider({ children }: { children: ReactNode }) {
     useState<DerivConnectionState>("disconnected");
   const [error, setError] = useState<string | null>(null);
   const [tickCount, setTickCount] = useState(0);
+  const [symbol, setSymbolState] = useState(DERIV_SYMBOL_VOL_100);
+
+  // Use a ref so the connect() callback always reads the latest symbol
+  const symbolRef = useRef(symbol);
 
   const wsRef = useRef<WebSocket | null>(null);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -75,13 +83,15 @@ export function DerivTickerProvider({ children }: { children: ReactNode }) {
       wsRef.current.close();
     }
 
+    const targetSymbol = symbolRef.current;
+
     setConnectionState(
       reconnectAttemptRef.current > 0 ? "reconnecting" : "connecting"
     );
     setError(null);
 
     console.log(
-      `[Deriv Oracle] Connecting to ${WS_URL} (attempt ${reconnectAttemptRef.current + 1})`
+      `[Deriv Oracle] Connecting to ${WS_URL} for ${targetSymbol} (attempt ${reconnectAttemptRef.current + 1})`
     );
 
     const ws = new WebSocket(WS_URL);
@@ -89,14 +99,13 @@ export function DerivTickerProvider({ children }: { children: ReactNode }) {
 
     ws.onopen = () => {
       if (!mountedRef.current) return;
-      console.log("[Deriv Oracle] WebSocket connected");
+      console.log(`[Deriv Oracle] WebSocket connected — subscribing to ${targetSymbol}`);
       setConnectionState("connected");
       reconnectAttemptRef.current = 0;
 
       ws.send(
-        JSON.stringify({ ticks: DERIV_SYMBOL_VOL_100, subscribe: 1, req_id: 1 })
+        JSON.stringify({ ticks: targetSymbol, subscribe: 1, req_id: 1 })
       );
-      console.log(`[Deriv Oracle] Subscribed to ${DERIV_SYMBOL_VOL_100} ticks`);
 
       pingIntervalRef.current = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
@@ -156,6 +165,24 @@ export function DerivTickerProvider({ children }: { children: ReactNode }) {
     };
   }, [cleanup]);
 
+  // Exposed setter: update both state and ref, then reconnect
+  const setSymbol = useCallback(
+    (newSymbol: string) => {
+      if (newSymbol === symbolRef.current) return;
+      console.log(`[Deriv Oracle] Switching symbol: ${symbolRef.current} → ${newSymbol}`);
+      symbolRef.current = newSymbol;
+      setSymbolState(newSymbol);
+      // Reset tick state for the new symbol
+      setCurrentTick(null);
+      setPreviousTick(null);
+      setTickCount(0);
+      reconnectAttemptRef.current = 0;
+      connect();
+    },
+    [connect]
+  );
+
+  // Initial connection on mount
   useEffect(() => {
     mountedRef.current = true;
     connect();
@@ -183,6 +210,8 @@ export function DerivTickerProvider({ children }: { children: ReactNode }) {
         connectionState,
         error,
         tickCount,
+        symbol,
+        setSymbol,
       }}
     >
       {children}

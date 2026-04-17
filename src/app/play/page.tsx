@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { getOrCreatePlayer, getPlayerById } from "@/lib/actions/player";
 import { findOrCreateLobby, joinLobby, getLobbyPlayers, getLobby } from "@/lib/actions/lobby";
 import type { Player, Lobby, LobbyPlayer } from "@/lib/types/database";
 import type { DerivActiveSymbol } from "@/lib/types/deriv";
 import { getOrAssignAvatar, syncAvatarCookie, getAvatarUrl, AVATAR_IDS } from "@/lib/avatar";
 import { useActiveSymbols, getMarketLabel, getSubmarketLabel } from "@/hooks/useActiveSymbols";
+import { useDerivTicker } from "@/hooks/useDerivTicker";
 import type { PayoutSummary } from "@/lib/game/payout-engine";
 import Navbar from "@/components/Navbar";
 import UsernameForm from "@/components/UsernameForm";
@@ -26,6 +27,56 @@ export default function PlayPage() {
   const [error, setError] = useState<string | null>(null);
   const [allPlayers, setAllPlayers] = useState<(LobbyPlayer & { player: Player })[]>([]);
   const [payoutSummary, setPayoutSummary] = useState<PayoutSummary | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+
+  // Background music — lives here so it persists through post-game screen
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const audio = new Audio("/assests/League%20of%20Traders%20Soundtrack.mp3");
+    audio.loop = true;
+    audio.volume = 0.4;
+    audioRef.current = audio;
+    return () => {
+      audio.pause();
+      audio.src = "";
+      audioRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    if ((phase === "game" || phase === "post-game") && !isMuted) {
+      audioRef.current.play().catch(() => {
+        console.log("[Play] Audio autoplay blocked — user must interact first");
+      });
+    }
+  }, [phase, isMuted]);
+
+  useEffect(() => {
+    if (!audioRef.current) return;
+    if (isMuted) {
+      audioRef.current.pause();
+    } else if (phase === "game" || phase === "post-game") {
+      audioRef.current.play().catch(() => {});
+    }
+  }, [isMuted, phase]);
+
+  const stopMusic = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  }, []);
+
+  // Shared tick provider — start streaming the lobby's symbol early
+  const { setSymbol } = useDerivTicker();
+
+  useEffect(() => {
+    if ((phase === "lobby" || phase === "game") && lobby?.symbol) {
+      setSymbol(lobby.symbol);
+    }
+  }, [phase, lobby?.symbol, setSymbol]);
 
   // Restore session from localStorage
   useEffect(() => {
@@ -180,6 +231,8 @@ export default function PlayPage() {
               currentPlayer={player}
               allPlayers={allPlayers}
               buyIn={lobby.buy_in}
+              isMuted={isMuted}
+              onMuteToggle={() => setIsMuted((m) => !m)}
               onGameEnd={(summary) => {
                 setPayoutSummary(summary);
                 setPhase("post-game");
@@ -197,6 +250,7 @@ export default function PlayPage() {
               currentPlayerId={player.id}
               symbol={lobby.symbol}
               onPlayAgain={async () => {
+                stopMusic();
                 const refreshed = await getPlayerById(player.id);
                 if (refreshed) setPlayer(refreshed);
                 setLobby(null);
@@ -205,6 +259,7 @@ export default function PlayPage() {
                 setPhase("market-select");
               }}
               onBackToMenu={async () => {
+                stopMusic();
                 const refreshed = await getPlayerById(player.id);
                 if (refreshed) setPlayer(refreshed);
                 setLobby(null);

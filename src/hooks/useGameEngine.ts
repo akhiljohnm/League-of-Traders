@@ -108,7 +108,7 @@ interface UseGameEngineReturn {
 export function useGameEngine(params: UseGameEngineParams): UseGameEngineReturn {
   const { lobbyId, symbol, currentPlayer, allPlayers, buyIn } = params;
 
-  // Deriv tick stream
+  // Deriv tick stream (symbol is set by the /play page at lobby phase)
   const { currentTick, previousTick, isConnected, tickCount } = useDerivTicker({
     symbol,
   });

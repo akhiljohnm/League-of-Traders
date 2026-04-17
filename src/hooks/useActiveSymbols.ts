@@ -53,6 +53,10 @@ interface UseActiveSymbolsReturn {
   error: string | null;
 }
 
+const MAX_RETRIES = 5;
+const BASE_DELAY_MS = 1_000;
+const PER_ATTEMPT_TIMEOUT_MS = 10_000;
+
 export function useActiveSymbols(): UseActiveSymbolsReturn {
   const [symbols, setSymbols] = useState<DerivActiveSymbol[]>([]);
   const [grouped, setGrouped] = useState<MarketGroup[]>([]);
@@ -62,75 +66,97 @@ export function useActiveSymbols(): UseActiveSymbolsReturn {
   useEffect(() => {
     let cancelled = false;
     let ws: WebSocket | null = null;
+    let attemptTimeout: ReturnType<typeof setTimeout> | null = null;
+    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    console.log("[ActiveSymbols] Fetching from Deriv API...");
-    ws = new WebSocket(WS_URL);
-
-    const timeout = setTimeout(() => {
-      if (!cancelled && ws) {
-        ws.close();
-        setError("Timed out fetching markets");
-        setIsLoading(false);
-      }
-    }, 15_000);
-
-    ws.onopen = () => {
-      if (cancelled) { ws?.close(); return; }
-      ws!.send(JSON.stringify({ active_symbols: "brief", req_id: 1 }));
-    };
-
-    ws.onmessage = (event: MessageEvent) => {
+    function attempt(retryCount: number) {
       if (cancelled) return;
-      try {
-        const data = JSON.parse(event.data);
 
-        if (data.error) {
-          console.error("[ActiveSymbols] API error:", data.error);
-          setError(data.error.message);
-          setIsLoading(false);
-          ws?.close();
-          clearTimeout(timeout);
-          return;
+      console.log(
+        `[ActiveSymbols] Connecting to Deriv V2 API (attempt ${retryCount + 1}/${MAX_RETRIES})...`
+      );
+
+      ws = new WebSocket(WS_URL);
+
+      attemptTimeout = setTimeout(() => {
+        if (!cancelled && ws) {
+          console.warn("[ActiveSymbols] Attempt timed out, closing...");
+          ws.close();
         }
+      }, PER_ATTEMPT_TIMEOUT_MS);
 
-        if (data.msg_type === "active_symbols") {
-          const all: DerivActiveSymbol[] = data.active_symbols;
+      ws.onopen = () => {
+        if (cancelled) { ws?.close(); return; }
+        console.log("[ActiveSymbols] Connected — requesting active_symbols");
+        ws!.send(JSON.stringify({ active_symbols: "brief", req_id: 1 }));
+      };
 
-          // Filter: only open, non-suspended markets
-          const active = all.filter(
-            (s) => s.exchange_is_open === 1 && s.is_trading_suspended === 0
-          );
+      ws.onmessage = (event: MessageEvent) => {
+        if (cancelled) return;
+        try {
+          const data = JSON.parse(event.data);
 
-          console.log(
-            `[ActiveSymbols] Received ${all.length} symbols, ${active.length} active`
-          );
+          if (data.error) {
+            console.error("[ActiveSymbols] API error:", data.error);
+            setError(data.error.message);
+            setIsLoading(false);
+            if (attemptTimeout) clearTimeout(attemptTimeout);
+            ws?.close();
+            return;
+          }
 
-          setSymbols(active);
-          setGrouped(groupByMarket(active));
-          setIsLoading(false);
-          clearTimeout(timeout);
-          ws?.close();
+          if (data.msg_type === "active_symbols") {
+            const all: DerivActiveSymbol[] = data.active_symbols;
+
+            const active = all.filter(
+              (s) => s.exchange_is_open === 1 && s.is_trading_suspended === 0
+            );
+
+            console.log(
+              `[ActiveSymbols] Received ${all.length} symbols, ${active.length} active`
+            );
+
+            setSymbols(active);
+            setGrouped(groupByMarket(active));
+            setIsLoading(false);
+            setError(null);
+            if (attemptTimeout) clearTimeout(attemptTimeout);
+            ws?.close();
+          }
+        } catch (e) {
+          console.error("[ActiveSymbols] Parse error:", e);
         }
-      } catch (e) {
-        console.error("[ActiveSymbols] Parse error:", e);
-      }
-    };
+      };
 
-    ws.onerror = (event) => {
-      if (cancelled) return;
-      console.error("[ActiveSymbols] WebSocket error:", event);
-      setError("Failed to connect to Deriv API");
-      setIsLoading(false);
-      clearTimeout(timeout);
-    };
+      ws.onerror = () => {
+        if (cancelled) return;
+        if (attemptTimeout) clearTimeout(attemptTimeout);
 
-    ws.onclose = () => {
-      clearTimeout(timeout);
-    };
+        if (retryCount + 1 < MAX_RETRIES) {
+          const delay = BASE_DELAY_MS * Math.pow(2, retryCount);
+          console.warn(
+            `[ActiveSymbols] Connection failed — retrying in ${delay}ms...`
+          );
+          setError(`Connecting to Deriv API (retry ${retryCount + 1}/${MAX_RETRIES})...`);
+          retryTimeout = setTimeout(() => attempt(retryCount + 1), delay);
+        } else {
+          console.error("[ActiveSymbols] All retries exhausted");
+          setError("Failed to connect to Deriv API after multiple attempts");
+          setIsLoading(false);
+        }
+      };
+
+      ws.onclose = () => {
+        if (attemptTimeout) clearTimeout(attemptTimeout);
+      };
+    }
+
+    attempt(0);
 
     return () => {
       cancelled = true;
-      clearTimeout(timeout);
+      if (attemptTimeout) clearTimeout(attemptTimeout);
+      if (retryTimeout) clearTimeout(retryTimeout);
       if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
         ws.close();
       }

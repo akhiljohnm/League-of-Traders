@@ -24,6 +24,7 @@ import type { Trade } from "@/lib/types/database";
 interface TradingChartProps {
   symbol: string;
   currentTick: DerivTick | null;
+  isConnected: boolean;
   playerBalances: PlayerBalance[];
   lobbyId: string;
 }
@@ -40,10 +41,10 @@ const PLAYER_COLORS = [
   "#9370DB", // Medium Purple
 ];
 
-const WS_URL = process.env.NEXT_PUBLIC_DERIV_WS_URL!;
-
 export default function TradingChart({
   symbol,
+  currentTick,
+  isConnected,
   playerBalances,
   lobbyId,
 }: TradingChartProps) {
@@ -54,8 +55,8 @@ export default function TradingChart({
   // Track if component is mounted (client-side only)
   const [isMounted, setIsMounted] = useState(false);
 
-  // Local live tick state (subscribed to the specific symbol)
-  const [liveTick, setLiveTick] = useState<DerivTick | null>(null);
+  // Triggers re-render when chart is created so marker effects re-evaluate
+  const [chartReady, setChartReady] = useState(false);
 
   // Fetch historical ticks
   const { prices, times, isLoading, error: historyError } = useTickHistory({
@@ -71,39 +72,6 @@ export default function TradingChart({
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
-  // Subscribe to live ticks for this specific symbol
-  useEffect(() => {
-    if (!isMounted) return;
-
-    const ws = new WebSocket(WS_URL);
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
-    };
-
-    ws.onmessage = (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-
-        if (data.msg_type === "tick" && data.tick) {
-          setLiveTick(data.tick as DerivTick);
-        }
-      } catch (e) {
-        console.error("[TradingChart] Failed to parse tick message:", e);
-      }
-    };
-
-    ws.onerror = () => {
-      console.error(`[TradingChart] WebSocket error for ${symbol}`);
-    };
-
-    return () => {
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.close();
-      }
-    };
-  }, [symbol, isMounted]);
 
   // Callback ref - called when the container div is mounted
   const chartContainerRef = useCallback((node: HTMLDivElement | null) => {
@@ -147,6 +115,8 @@ export default function TradingChart({
         timeVisible: true,
         secondsVisible: true,
         borderColor: "#27272A",
+        rightOffset: 5,
+        barSpacing: 14,
       },
       rightPriceScale: {
         borderColor: "#27272A",
@@ -192,6 +162,7 @@ export default function TradingChart({
 
     chartRef.current = chart;
     seriesRef.current = areaSeries;
+    setChartReady(true);
 
     // Setup resize observer — track both width and height
     resizeObserverRef.current = new ResizeObserver((entries) => {
@@ -209,6 +180,9 @@ export default function TradingChart({
   // Player color and name mappings
   const playerColorMap = useRef<Map<string, string>>(new Map());
   const playerNameMap = useRef<Map<string, string>>(new Map());
+
+  // Persist markers so they can be re-applied after every series.update()
+  const markersRef = useRef<any[]>([]);
 
   // ---- Assign colors and names to players (only when count changes) ----
   useEffect(() => {
@@ -241,7 +215,18 @@ export default function TradingChart({
   }, [lobbyId]);
 
   // ---- Subscribe to real-time trade updates ----
+  // Supabase Realtime delivers NUMERIC columns as strings — normalize to numbers.
   useEffect(() => {
+    function normalizeTrade(raw: Record<string, unknown>): Trade {
+      return {
+        ...raw,
+        stake: Number(raw.stake),
+        entry_price: Number(raw.entry_price),
+        exit_price: raw.exit_price !== null ? Number(raw.exit_price) : null,
+        payout: raw.payout !== null ? Number(raw.payout) : null,
+      } as Trade;
+    }
+
     const channel = supabase
       .channel(`chart-trades-${lobbyId}`)
       .on(
@@ -253,7 +238,7 @@ export default function TradingChart({
           filter: `lobby_id=eq.${lobbyId}`,
         },
         (payload) => {
-          const newTrade = payload.new as Trade;
+          const newTrade = normalizeTrade(payload.new);
           setAllTrades((prev) => [...prev, newTrade]);
         }
       )
@@ -266,7 +251,7 @@ export default function TradingChart({
           filter: `lobby_id=eq.${lobbyId}`,
         },
         (payload) => {
-          const updatedTrade = payload.new as Trade;
+          const updatedTrade = normalizeTrade(payload.new);
           setAllTrades((prev) =>
             prev.map((t) => (t.id === updatedTrade.id ? updatedTrade : t))
           );
@@ -314,91 +299,106 @@ export default function TradingChart({
         value: price,
       }));
 
-      // Set the data
+      // Set the data (clears markers — re-apply from ref)
       seriesRef.current.setData(data);
       setChartData(data);
+      if (markersRef.current.length > 0) {
+        seriesRef.current.setMarkers(markersRef.current);
+      }
 
-      // Auto-fit the chart viewport to show all data
+      // Scroll to the live edge — barSpacing controls zoom level
       if (chartRef.current) {
-        chartRef.current.timeScale().fitContent();
+        chartRef.current.timeScale().scrollToRealTime();
       }
     } catch (error) {
       console.error(`[TradingChart] Error loading data:`, error);
     }
   }, [prices, times]);
 
-  // ---- Update chart with live tick ----
+  // ---- Update chart with live tick from shared DerivTickerProvider ----
   useEffect(() => {
-    if (!seriesRef.current || !liveTick) return;
+    if (!seriesRef.current || !currentTick) return;
 
     const newPoint: LineData = {
-      time: liveTick.epoch as Time,
-      value: liveTick.quote,
+      time: currentTick.epoch as Time,
+      value: currentTick.quote,
     };
 
     seriesRef.current.update(newPoint);
     setChartData((prev) => [...prev, newPoint]);
-  }, [liveTick]);
+
+    // Re-apply markers after update() to prevent them being cleared
+    if (markersRef.current.length > 0) {
+      seriesRef.current.setMarkers(markersRef.current);
+    }
+
+    // Keep the chart tracking the live edge
+    if (chartRef.current) {
+      chartRef.current.timeScale().scrollToRealTime();
+    }
+  }, [currentTick]);
 
   // ---- Render trade markers ----
+  // Depends on chartReady so this re-runs after the chart is created,
+  // even if allTrades was already populated before the series existed.
   useEffect(() => {
-    if (!seriesRef.current) return;
+    if (!seriesRef.current || !chartReady) return;
 
     if (allTrades.length === 0) {
+      markersRef.current = [];
       seriesRef.current.setMarkers([]);
       return;
     }
 
-    const markers: any[] = [];
+    try {
+      const markers: any[] = [];
 
-    allTrades.forEach((trade) => {
-      const color = playerColorMap.current.get(trade.player_id) || "#00FFA3";
-      const playerName = playerNameMap.current.get(trade.player_id) || "??";
+      allTrades.forEach((trade) => {
+        const color = playerColorMap.current.get(trade.player_id) || "#00FFA3";
+        const playerName = playerNameMap.current.get(trade.player_id) || "??";
+        const initials = playerName.slice(0, 2).toUpperCase();
+        const entryTime = Math.floor(new Date(trade.created_at).getTime() / 1000) as Time;
+        const stake = Number(trade.stake) || 0;
 
-      // Get player initials (first 2 letters, uppercase)
-      const initials = playerName.slice(0, 2).toUpperCase();
+        // Entry marker
+        markers.push({
+          time: entryTime,
+          position: "belowBar",
+          color,
+          shape: trade.direction === "UP" ? "arrowUp" : "arrowDown",
+          text: `[${initials}] ${trade.direction} $${stake.toFixed(0)}`,
+          size: 2,
+        });
 
-      // Convert ISO timestamp to Unix epoch (seconds)
-      const entryTime = Math.floor(new Date(trade.created_at).getTime() / 1000) as Time;
+        // Exit marker (only for resolved trades)
+        if (trade.status !== "open" && trade.resolved_at && trade.exit_price !== null) {
+          const exitTime = Math.floor(new Date(trade.resolved_at).getTime() / 1000) as Time;
+          const exitColor = trade.status === "won" ? "#00FFA3" : "#FF3366";
+          const payout = Number(trade.payout ?? 0);
+          const displayPayout = trade.status === "won" ? payout : -stake;
 
-      // Entry marker (always render) - use belowBar for better visibility
-      markers.push({
-        time: entryTime,
-        position: "belowBar",
-        color,
-        shape: trade.direction === "UP" ? "arrowUp" : "arrowDown",
-        text: `[${initials}] ${trade.direction} $${trade.stake.toFixed(0)}`,
-        size: 2, // Make markers larger
+          markers.push({
+            time: exitTime,
+            position: "aboveBar",
+            color: exitColor,
+            shape: "circle",
+            text: trade.status === "won"
+              ? `[${initials}] +$${displayPayout.toFixed(0)}`
+              : `[${initials}] -$${stake.toFixed(0)}`,
+            size: 2,
+          });
+        }
       });
 
-      // Exit marker (only for resolved trades)
-      if (trade.status !== "open" && trade.resolved_at && trade.exit_price !== null) {
-        const exitTime = Math.floor(new Date(trade.resolved_at).getTime() / 1000) as Time;
-        const exitColor = trade.status === "won" ? "#00FFA3" : "#FF3366";
+      markers.sort((a, b) => a.time - b.time);
 
-        // Calculate display payout
-        const displayPayout = trade.payout !== null
-          ? (trade.status === "won" ? trade.payout : -trade.stake)
-          : 0;
-
-        markers.push({
-          time: exitTime,
-          position: "aboveBar",
-          color: exitColor,
-          shape: "circle",
-          text: trade.status === "won"
-            ? `[${initials}] +$${displayPayout.toFixed(0)}`
-            : `[${initials}] -$${trade.stake.toFixed(0)}`,
-          size: 2, // Make markers larger
-        });
-      }
-    });
-
-    // Sort markers by time (ascending order required by lightweight-charts)
-    markers.sort((a, b) => a.time - b.time);
-
-    seriesRef.current.setMarkers(markers);
-  }, [allTrades]);
+      markersRef.current = markers;
+      seriesRef.current.setMarkers(markers);
+      console.log(`[TradingChart] Set ${markers.length} markers from ${allTrades.length} trades`);
+    } catch (err) {
+      console.error("[TradingChart] Failed to render markers:", err);
+    }
+  }, [allTrades, chartReady]);
 
   if (isLoading) {
     return (
@@ -444,9 +444,9 @@ export default function TradingChart({
           LIVE CHART
         </h3>
         <div className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-alpha-green animate-live-pulse" />
+          <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? "bg-alpha-green animate-live-pulse" : "bg-yellow-500 animate-pulse"}`} />
           <span className="text-[9px] text-text-muted uppercase tracking-wider">
-            {chartData.length} TICKS
+            {isConnected ? `${chartData.length} TICKS` : "RECONNECTING..."}
           </span>
         </div>
       </div>
