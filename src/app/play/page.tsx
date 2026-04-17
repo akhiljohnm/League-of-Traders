@@ -154,6 +154,12 @@ export default function PlayPage() {
 
   const handleExitGame = useCallback(async () => {
     console.log("[Play] Player exited game — returning to market select");
+    // Stop background music on exit
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setIsMuted(false);
     if (player) {
       const refreshed = await getPlayerById(player.id);
       if (refreshed) setPlayer(refreshed);
