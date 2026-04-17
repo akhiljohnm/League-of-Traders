@@ -4,6 +4,7 @@ import type { Lobby, LobbyPlayer, Player, BotStrategy } from "@/lib/types/databa
 const MAX_LOBBY_SIZE = 5;
 const MIN_LOBBY_SIZE = 2;
 const MIN_BUY_IN = 100;
+const LOBBY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 const BOT_NAMES: Record<BotStrategy, string[]> = {
   trend_follower: ["TF-Alpha", "TF-Sigma", "TF-Nova"],
@@ -17,6 +18,66 @@ function randomBotName(strategy: BotStrategy): string {
     .toString()
     .padStart(3, "0");
   return `${names[Math.floor(Math.random() * names.length)]}-${suffix}`;
+}
+
+/**
+ * Clean up stale waiting lobbies older than LOBBY_TIMEOUT_MS.
+ * Marks them as completed, refunds buy-ins to all players.
+ */
+export async function cleanupStaleLobbies(): Promise<number> {
+  const cutoff = new Date(Date.now() - LOBBY_TIMEOUT_MS).toISOString();
+
+  // Find all stale waiting lobbies
+  const { data: staleLobbies } = await supabase
+    .from("lobbies")
+    .select("id, buy_in")
+    .eq("status", "waiting")
+    .lt("created_at", cutoff);
+
+  if (!staleLobbies || staleLobbies.length === 0) return 0;
+
+  const staleIds = staleLobbies.map((l) => l.id);
+  console.log(`[Lobby] Cleaning up ${staleIds.length} stale lobbies`);
+
+  // Get all players in stale lobbies so we can refund buy-ins
+  const { data: stalePlayers } = await supabase
+    .from("lobby_players")
+    .select("player_id, lobby_id")
+    .in("lobby_id", staleIds);
+
+  // Build a map of lobby_id -> buy_in for refund amounts
+  const buyInMap = new Map(staleLobbies.map((l) => [l.id, l.buy_in ?? 0]));
+
+  // Refund each player's buy-in (skip bots — their balance doesn't matter)
+  if (stalePlayers && stalePlayers.length > 0) {
+    for (const lp of stalePlayers) {
+      const refund = buyInMap.get(lp.lobby_id) ?? 0;
+      if (refund > 0) {
+        const { data: player } = await supabase
+          .from("players")
+          .select("game_token_balance, is_bot")
+          .eq("id", lp.player_id)
+          .single();
+
+        if (player && !player.is_bot) {
+          await supabase
+            .from("players")
+            .update({ game_token_balance: player.game_token_balance + refund })
+            .eq("id", lp.player_id);
+          console.log(`[Lobby] Refunded $${refund} to player ${lp.player_id}`);
+        }
+      }
+    }
+  }
+
+  // Mark all stale lobbies as completed
+  await supabase
+    .from("lobbies")
+    .update({ status: "completed", ended_at: new Date().toISOString() })
+    .in("id", staleIds);
+
+  console.log(`[Lobby] Cleaned up ${staleIds.length} stale lobbies`);
+  return staleIds.length;
 }
 
 /**
@@ -34,6 +95,12 @@ export async function findOrCreateLobby(
     throw new Error(`Minimum buy-in is $${MIN_BUY_IN}`);
   }
 
+  // Clean up stale lobbies before matchmaking
+  await cleanupStaleLobbies();
+
+  // Only match lobbies created within the timeout window
+  const cutoff = new Date(Date.now() - LOBBY_TIMEOUT_MS).toISOString();
+
   // Find waiting lobbies with matching buy-in AND symbol
   const { data: waitingLobbies } = await supabase
     .from("lobbies")
@@ -41,6 +108,7 @@ export async function findOrCreateLobby(
     .eq("status", "waiting")
     .eq("buy_in", buyIn)
     .eq("symbol", symbol)
+    .gte("created_at", cutoff)
     .order("created_at", { ascending: true });
 
   if (waitingLobbies) {

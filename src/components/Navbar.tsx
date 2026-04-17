@@ -8,6 +8,7 @@ interface NavItem {
   label: string;
   href: string;
   isRoute?: boolean;
+  external?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -16,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "80/20 Engine", href: "#engine" },
   { label: "Bots", href: "#bots" },
   { label: "Vibe-Coding", href: "/vibe-coding", isRoute: true },
+  { label: "Keynote", href: "/assests/League_of_Traders_Keynote.pdf", external: true },
 ];
 
 const SECTION_IDS = NAV_ITEMS.filter((item) => !item.isRoute).map((item) =>
@@ -100,7 +102,17 @@ export default function Navbar() {
         {/* Desktop nav links */}
         <div className="hidden md:flex items-center gap-1">
           {NAV_ITEMS.map((item) =>
-            item.isRoute ? (
+            item.external ? (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-lg text-sm transition-colors duration-200 text-text-secondary hover:text-text-primary hover:bg-bg-elevated/50"
+              >
+                {item.label}
+              </a>
+            ) : item.isRoute ? (
               <Link
                 key={item.href}
                 href={item.href}
@@ -172,7 +184,18 @@ export default function Navbar() {
         <div className="md:hidden nav-glass border-t border-border-default">
           <div className="max-w-6xl mx-auto px-6 py-4 flex flex-col gap-1">
             {NAV_ITEMS.map((item) =>
-              item.isRoute ? (
+              item.external ? (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMobileOpen(false)}
+                  className="px-3 py-2.5 rounded-lg text-sm transition-colors duration-200 text-text-secondary hover:text-text-primary hover:bg-bg-elevated/50"
+                >
+                  {item.label}
+                </a>
+              ) : item.isRoute ? (
                 <Link
                   key={item.href}
                   href={item.href}
