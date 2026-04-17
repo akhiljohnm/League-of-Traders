@@ -34,8 +34,8 @@ export default function PlayPage() {
 
   useEffect(() => {
     const audio = new Audio("/assests/League%20of%20Traders%20Soundtrack.mp3");
-    audio.loop = true;
-    audio.volume = 0.4;
+    audio.loop = false;
+    audio.volume = 0.25;
     audioRef.current = audio;
     return () => {
       audio.pause();
