@@ -99,7 +99,7 @@ export default function Home() {
               <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-safety-cyan to-transparent" />
               <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
                 <iframe
-                  src="https://www.youtube.com/embed/xDXUiD5JF2Y"
+                  src="https://www.youtube.com/embed/Er_JYfuhpd8"
                   title="League of Traders — Gameplay Demo"
                   className="absolute inset-0 w-full h-full"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
